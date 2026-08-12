@@ -6,12 +6,14 @@ interface AdminPasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  adminPassword?: string;
 }
 
 export const AdminPasswordModal: React.FC<AdminPasswordModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  adminPassword = '2580',
 }) => {
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -37,7 +39,7 @@ export const AdminPasswordModal: React.FC<AdminPasswordModalProps> = ({
   };
 
   const verifyPassword = (inputPwd: string) => {
-    if (inputPwd === '2580') {
+    if (inputPwd === adminPassword) {
       soundManager.playFanfare();
       onSuccess();
       onClose();
@@ -53,8 +55,8 @@ export const AdminPasswordModal: React.FC<AdminPasswordModalProps> = ({
     const val = e.target.value;
     setPassword(val);
     if (errorMessage) setErrorMessage('');
-    // Auto submit if 4 digits entered
-    if (val.length === 4) {
+    // Auto submit if entered length matches admin password length
+    if (val.length === adminPassword.length) {
       verifyPassword(val);
     }
   };

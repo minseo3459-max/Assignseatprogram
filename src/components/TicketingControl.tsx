@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Desk, TicketingState, TicketingClaim } from '../types';
 import { soundManager } from '../utils/sound';
+import { ShareLinkModal } from './ShareLinkModal';
 import {
   Ticket,
   Play,
@@ -15,7 +16,12 @@ import {
   AlertCircle,
   Eye,
   Monitor,
-  RotateCcw
+  RotateCcw,
+  Share2,
+  Copy,
+  Check,
+  Link as LinkIcon,
+  QrCode
 } from 'lucide-react';
 
 interface TicketingControlProps {
@@ -26,6 +32,8 @@ interface TicketingControlProps {
   setTicketingState: React.Dispatch<React.SetStateAction<TicketingState>>;
   onRefreshTicketing: () => void;
   onOpenStudentView: () => void;
+  classId?: string;
+  onGenerateRandomLink?: () => string;
 }
 
 export const TicketingControl: React.FC<TicketingControlProps> = ({
@@ -36,18 +44,50 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
   setTicketingState,
   onRefreshTicketing,
   onOpenStudentView,
+  classId,
+  onGenerateRandomLink,
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copiedQuickLink, setCopiedQuickLink] = useState(false);
 
   const activeStudents = students.filter((s) => !s.isAbsent);
   const totalDesks = desks.length;
   const claimedCount = Object.keys(ticketingState.claims).length;
   const remainingDesks = Math.max(0, totalDesks - claimedCount);
 
+  // Dedicated Student Link with unique classId query parameter
+  const baseUrl = window.location.origin + window.location.pathname;
+  const studentLink = classId
+    ? `${baseUrl}?classId=${classId}&mode=student_ticketing`
+    : `${baseUrl}?mode=student_ticketing`;
+
+  const handleRandomizeLink = () => {
+    if (onGenerateRandomLink) {
+      const newId = onGenerateRandomLink();
+      soundManager.playFanfare();
+      showToast(`🎲 새 학급 전용 링크(코드: ${newId})가 생성되었습니다!`);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  const handleCopyQuickLink = async () => {
+    try {
+      await navigator.clipboard.writeText(studentLink);
+      soundManager.playPop();
+      setCopiedQuickLink(true);
+      showToast('📋 학생 전용 티켓팅 링크가 복사되었습니다!');
+      setTimeout(() => setCopiedQuickLink(false), 2500);
+    } catch {
+      setCopiedQuickLink(true);
+      showToast('📋 학생 전용 티켓팅 링크가 복사되었습니다!');
+      setTimeout(() => setCopiedQuickLink(false), 2500);
+    }
   };
 
   // Toggle Ticketing Open/Close
@@ -147,16 +187,25 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
             )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            교사가 자리를 지정해두면 학생들이 실시간으로 빈 자리에 응모할 수 있습니다.
+            학생 전용 공유 링크를 통해 학생들이 각자의 디바이스에서 실시간으로 자리를 응모할 수 있습니다.
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Main Link Generation & Share Button */}
+          <button
+            onClick={() => setIsShareModalOpen(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-black text-sm bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white shadow-md shadow-indigo-500/20 transition transform active:scale-95 animate-pulse"
+          >
+            <Share2 className="w-4 h-4" />
+            <span>🔗 학생 전용 링크 생성 & 공유</span>
+          </button>
+
           {/* Main Toggle Button */}
           <button
             onClick={handleToggleTicketing}
-            className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl font-black text-white shadow-md transition transform active:scale-95 ${
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-black text-sm text-white shadow-md transition transform active:scale-95 ${
               ticketingState.isOpen
                 ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-900/20'
                 : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'
@@ -175,26 +224,26 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
             )}
           </button>
 
-          {/* REALTIME REFRESH BUTTON (Requested by user: enabled only for ticketing!) */}
+          {/* REALTIME REFRESH BUTTON */}
           <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white shadow-md transition ${
+            className={`flex items-center space-x-2 px-3.5 py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 active:scale-95 text-white shadow-md transition ${
               isRefreshing ? 'opacity-70 cursor-wait' : ''
             }`}
             title="학생들의 실시간 응모 현황을 즉시 불러옵니다"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>실시간 업데이트</span>
+            <span className="hidden sm:inline">실시간 업데이트</span>
           </button>
 
           {/* Open Student View Button */}
           <button
             onClick={onOpenStudentView}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-slate-900 hover:bg-slate-800 text-white border border-slate-800 transition shadow-md"
+            className="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl font-bold text-sm bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition shadow-xs"
           >
-            <Monitor className="w-4 h-4 text-emerald-400" />
-            <span>학생 응모 창 보기</span>
+            <Monitor className="w-4 h-4 text-emerald-600" />
+            <span className="hidden sm:inline">학생 화면 열기</span>
           </button>
 
           {/* Reset Button */}
@@ -204,6 +253,75 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
             className="p-2.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 rounded-xl transition"
           >
             <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Share Link Banner Card */}
+      <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-indigo-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center font-bold text-xl shrink-0">
+            🔗
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-extrabold text-indigo-300 uppercase tracking-wider">
+                학생 전용 티켓팅 자동 생성 링크
+              </span>
+              {classId && (
+                <span className="bg-indigo-500/30 text-indigo-200 text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-full border border-indigo-400/40">
+                  코드: {classId}
+                </span>
+              )}
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                실시간 동기화 지원
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 truncate mt-0.5 font-mono">
+              {studentLink}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {onGenerateRandomLink && (
+            <button
+              onClick={handleRandomizeLink}
+              title="다른 학급과 겹치지 않도록 완전히 새로운 링크를 생성합니다"
+              className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 border border-indigo-400/30 rounded-xl text-xs font-bold transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>🎲 링크 랜덤 변경</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleCopyQuickLink}
+            className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition shadow-md ${
+              copiedQuickLink
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-indigo-500 hover:bg-indigo-400 text-white'
+            }`}
+          >
+            {copiedQuickLink ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span>복사 완료!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                <span>링크 복사</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => setIsShareModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          >
+            <QrCode className="w-4 h-4 text-emerald-400" />
+            <span>QR/공유 상세</span>
           </button>
         </div>
       </div>
@@ -253,7 +371,7 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
 
         {claimedCount === 0 ? (
           <div className="p-8 text-center text-slate-400 text-sm italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-            아직 학생들의 응모 내역이 없습니다. [티켓팅 시작하기]를 누르고 학생 응모 창에서 응모를 시작해 보세요!
+            아직 학생들의 응모 내역이 없습니다. 상단 [학생 전용 링크 생성 & 공유] 버튼으로 학생들에게 링크를 보내보세요!
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -265,7 +383,7 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
                   className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                 >
                   <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span className="font-extrabold text-slate-900">{claim.studentName}</span>
                   </div>
 
@@ -288,6 +406,17 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
           </div>
         )}
       </div>
+
+      {/* Share Link Modal */}
+      <ShareLinkModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        ticketingState={ticketingState}
+        onToggleTicketing={handleToggleTicketing}
+        classId={classId}
+        onGenerateRandomLink={onGenerateRandomLink}
+      />
     </div>
   );
 };
+

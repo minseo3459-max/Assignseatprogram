@@ -17,7 +17,11 @@ import {
   Check,
   RotateCcw,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  Lock,
+  KeyRound,
+  UserX,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { DESK_WIDTH, DESK_HEIGHT } from '../utils/classroom';
 
@@ -30,6 +34,7 @@ interface StudentTicketingViewProps {
   onUpdateTicketingState: (newState: TicketingState) => void;
   onRefreshData: () => void;
   onSwitchToTeacherView?: () => void;
+  isStudentOnlyMode?: boolean;
 }
 
 export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
@@ -41,6 +46,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   onUpdateTicketingState,
   onRefreshData,
   onSwitchToTeacherView,
+  isStudentOnlyMode,
 }) => {
   // Selected Student ID
   const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
@@ -51,8 +57,16 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     }
   });
 
-  // Target desk student wants to book
+  // Modal states for seat claim, swap, and cancellation
   const [confirmDesk, setConfirmDesk] = useState<Desk | null>(null);
+  const [swapConfirmDesk, setSwapConfirmDesk] = useState<Desk | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+  // PIN Verification Modal states
+  const [pinModalStudent, setPinModalStudent] = useState<Student | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -66,14 +80,73 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   const currentStudentDeskId = currentStudentClaimEntry ? currentStudentClaimEntry[0] : null;
   const currentStudentDesk = desks.find((d) => d.id === currentStudentDeskId);
 
-  // Save selected student ID to sessionStorage
+  // Handle student name selection with PIN verification check
   const handleSelectStudent = (id: string) => {
-    setSelectedStudentId(id);
-    try {
-      sessionStorage.setItem('student_ticketing_my_id', id);
-    } catch {
-      // Ignore
+    if (!id) {
+      setSelectedStudentId('');
+      try {
+        sessionStorage.removeItem('student_ticketing_my_id');
+      } catch {
+        // ignore
+      }
+      return;
     }
+
+    const target = activeStudents.find((s) => s.id === id);
+    if (!target) return;
+
+    // Check if already verified on this device
+    const isVerified = localStorage.getItem(`student_pin_verified_${id}`) === 'true';
+    if (isVerified) {
+      setSelectedStudentId(id);
+      try {
+        sessionStorage.setItem('student_ticketing_my_id', id);
+      } catch {
+        // ignore
+      }
+      showToast(`🔑 [${target.name}] 학생 본인 확인이 완료되었습니다.`);
+    } else {
+      // Prompt PIN Modal
+      setPinModalStudent(target);
+      setPinInput('');
+      setPinError(null);
+    }
+  };
+
+  // Submit PIN for student authentication
+  const handleVerifyPinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinModalStudent) return;
+
+    const expectedPin = pinModalStudent.pin || '1234';
+    if (pinInput.trim() === expectedPin) {
+      localStorage.setItem(`student_pin_verified_${pinModalStudent.id}`, 'true');
+      setSelectedStudentId(pinModalStudent.id);
+      try {
+        sessionStorage.setItem('student_ticketing_my_id', pinModalStudent.id);
+      } catch {
+        // ignore
+      }
+      soundManager.playPop();
+      showToast(`✅ [${pinModalStudent.name}] 학생 본인 인증 성공!`);
+      setPinModalStudent(null);
+      setPinInput('');
+      setPinError(null);
+    } else {
+      soundManager.playTick();
+      setPinError('⚠️ 비밀번호가 일치하지 않습니다. (선생님께 받은 4자리 PIN을 입력하세요)');
+    }
+  };
+
+  // Switch account / re-authenticate
+  const handleSwitchAccount = () => {
+    setSelectedStudentId('');
+    try {
+      sessionStorage.removeItem('student_ticketing_my_id');
+    } catch {
+      // ignore
+    }
+    showToast('이름 선택 화면으로 이동합니다.');
   };
 
   // Toast feedback helper
@@ -95,7 +168,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     }, 500);
   };
 
-  // Execute Seat Claiming
+  // Execute Seat Claiming (First-time claim)
   const handleConfirmClaim = () => {
     if (!selectedStudentId || !currentStudent) {
       alert('먼저 본인 이름을 선택해주세요!');
@@ -145,7 +218,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       lastUpdated: new Date().toISOString(),
     };
 
-    // Update parent ticketing state
     onUpdateTicketingState(updatedState);
 
     // Sync desks assignedStudentId for classroom representation
@@ -161,7 +233,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       })
     );
 
-    // Sound & Confetti Effect!
     soundManager.playFanfare();
     try {
       confetti({
@@ -177,29 +248,103 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     setConfirmDesk(null);
   };
 
-  // Cancel Claim
-  const handleCancelClaim = () => {
-    if (!currentStudentDeskId || !currentStudent) return;
+  // Execute Seat Swap (Changing from Desk A to Desk B)
+  const handleConfirmSwap = () => {
+    if (!selectedStudentId || !currentStudent || !swapConfirmDesk) return;
 
-    if (window.confirm('현재 자리 응모를 취소하시겠습니까?')) {
-      const newClaims = { ...ticketingState.claims };
-      delete newClaims[currentStudentDeskId];
-
-      const updatedState: TicketingState = {
-        ...ticketingState,
-        claims: newClaims,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      onUpdateTicketingState(updatedState);
-
-      setDesks((prev) =>
-        prev.map((d) => (d.id === currentStudentDeskId ? { ...d, assignedStudentId: null } : d))
-      );
-
-      soundManager.playPop();
-      showToast('자리 응모가 취소되었습니다.');
+    if (!ticketingState.isOpen) {
+      alert('현재 티켓팅이 마감되어 있습니다.');
+      setSwapConfirmDesk(null);
+      return;
     }
+
+    if (ticketingState.claims[swapConfirmDesk.id]) {
+      alert('⚠️ 해당 자리는 이미 다른 학생이 선점했습니다. 다른 빈 자리를 선택해주세요.');
+      onRefreshData();
+      setSwapConfirmDesk(null);
+      return;
+    }
+
+    const newClaims = { ...ticketingState.claims };
+
+    // Remove old seat claim
+    if (currentStudentDeskId) {
+      delete newClaims[currentStudentDeskId];
+    }
+
+    const nowStr = new Date().toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+
+    // Assign new seat claim
+    newClaims[swapConfirmDesk.id] = {
+      studentId: currentStudent.id,
+      studentName: currentStudent.name,
+      claimedAt: nowStr,
+    };
+
+    const updatedState: TicketingState = {
+      ...ticketingState,
+      claims: newClaims,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    onUpdateTicketingState(updatedState);
+
+    setDesks((prev) =>
+      prev.map((d) => {
+        if (d.id === swapConfirmDesk.id) {
+          return { ...d, assignedStudentId: currentStudent.id };
+        }
+        if (d.id === currentStudentDeskId) {
+          return { ...d, assignedStudentId: null };
+        }
+        return d;
+      })
+    );
+
+    soundManager.playFanfare();
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch {
+      // ignore
+    }
+
+    showToast(`🎉 [${swapConfirmDesk.label}번 자리]로 성공적으로 변경되었습니다!`);
+    setSwapConfirmDesk(null);
+  };
+
+  // Execute Claim Cancellation
+  const handleConfirmCancel = () => {
+    if (!currentStudentDeskId || !currentStudent) {
+      setIsCancelModalOpen(false);
+      return;
+    }
+
+    const newClaims = { ...ticketingState.claims };
+    delete newClaims[currentStudentDeskId];
+
+    const updatedState: TicketingState = {
+      ...ticketingState,
+      claims: newClaims,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    onUpdateTicketingState(updatedState);
+
+    setDesks((prev) =>
+      prev.map((d) => (d.id === currentStudentDeskId ? { ...d, assignedStudentId: null } : d))
+    );
+
+    soundManager.playPop();
+    showToast('자리 응모가 성공적으로 취소되었습니다.');
+    setIsCancelModalOpen(false);
   };
 
   // Calculate statistics
@@ -223,7 +368,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
       {/* Header Banner for Student View */}
       <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-xl border border-emerald-500/30 relative overflow-hidden">
-        {/* Background Decorative Element */}
         <div className="absolute -right-10 -bottom-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
@@ -231,7 +375,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
             <div className="flex items-center space-x-3 mb-2">
               <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 font-extrabold text-xs rounded-full border border-emerald-500/40 flex items-center space-x-1">
                 <Ticket className="w-3.5 h-3.5" />
-                <span>학생 실시간 응모 전용</span>
+                <span>학생 실시간 응모 전용 (로그인 불필요)</span>
               </span>
 
               {ticketingState.isOpen ? (
@@ -251,11 +395,11 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               🎟️ 우리반 자율 자리 티켓팅
             </h2>
             <p className="text-slate-300 text-sm mt-1">
-              본인 이름을 선택한 후 원하시는 빈 자리를 눌러 빠르게 자리를 응모하세요!
+              별도의 계정 회원가입 없이 내 이름을 선택하고 원하는 빈 자리를 눌러 신청하세요!
             </p>
           </div>
 
-          {/* Controls: Realtime Update Button & Switcher */}
+          {/* Controls: Realtime Update Button */}
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleRefreshClick}
@@ -266,10 +410,10 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               title="실시간 현황 업데이트"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>실시간 업데이트</span>
+              <span>실시간 현황 업데이트</span>
             </button>
 
-            {onSwitchToTeacherView && (
+            {!isStudentOnlyMode && onSwitchToTeacherView && (
               <button
                 onClick={onSwitchToTeacherView}
                 className="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
@@ -315,15 +459,21 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               👤
             </div>
             <div>
-              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">
-                1단계: 본인 확인
-              </label>
+              <div className="flex items-center space-x-2">
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider">
+                  1단계: 본인 확인 (부정 응모 방지 PIN 지원)
+                </label>
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300 flex items-center space-x-1">
+                  <ShieldCheck className="w-3 h-3 text-amber-600" />
+                  <span>타인 도용 방지</span>
+                </span>
+              </div>
               <h3 className="text-lg font-bold text-slate-900">누구의 이름으로 응모할까요?</h3>
             </div>
           </div>
 
           {/* Student Selector Dropdown */}
-          <div className="w-full md:w-72">
+          <div className="w-full md:w-80">
             <select
               value={selectedStudentId}
               onChange={(e) => handleSelectStudent(e.target.value)}
@@ -349,8 +499,9 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-black text-slate-900 text-lg">{currentStudent?.name} 학생</span>
-                  <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-bold">
-                    선택됨
+                  <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold flex items-center space-x-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>PIN 인증 완료</span>
                   </span>
                 </div>
 
@@ -368,21 +519,33 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               </div>
             </div>
 
-            {currentStudentDesk && (
+            <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+              {currentStudentDesk && (
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  disabled={!ticketingState.isOpen}
+                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>응모 취소하기</span>
+                </button>
+              )}
+
               <button
-                onClick={handleCancelClaim}
-                disabled={!ticketingState.isOpen}
-                className="w-full sm:w-auto px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1"
+                onClick={handleSwitchAccount}
+                className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition"
+                title="다른 계정/이름 선택"
               >
-                <XCircle className="w-4 h-4" />
-                <span>응모 취소하기</span>
+                이름 변경
               </button>
-            )}
+            </div>
           </div>
         ) : (
           <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl text-amber-900 text-sm font-semibold flex items-center space-x-2">
             <HelpCircle className="w-5 h-5 text-amber-600 shrink-0" />
-            <span>상단 드롭다운에서 먼저 본인 이름을 선택해야 자리를 누르고 티켓팅할 수 있습니다!</span>
+            <span>
+              상단 드롭다운에서 본인 이름을 선택한 후, 4자리 비밀번호(PIN)를 입력하면 응모할 수 있습니다. (기본 PIN: 1234)
+            </span>
           </div>
         )}
       </div>
@@ -422,26 +585,46 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
           >
             {/* Blackboard */}
             <div className="w-full flex flex-col items-center mb-8 relative">
-              <div className="w-11/12 max-w-2xl bg-slate-800 text-slate-100 rounded-xl py-3 px-6 shadow-md border-4 border-amber-900 flex items-center justify-between relative overflow-hidden">
-                <div className="flex items-center space-x-2 font-bold text-sm tracking-wider text-emerald-300">
+              <div className="w-11/12 max-w-2xl bg-slate-800 text-slate-100 rounded-xl py-3 px-6 shadow-md border-4 border-amber-900 flex items-center justify-center relative overflow-hidden">
+                <div className="flex items-center space-x-2 font-bold text-sm sm:text-base tracking-wider text-emerald-300 text-center">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span>[앞] 칠 판 (BLACKBOARD)</span>
+                  <span>칠 판 (BLACKBOARD)</span>
                 </div>
-                <div className="text-xs text-slate-300 font-mono">교탁 및 화면 방향</div>
               </div>
             </div>
 
             {/* Left Window */}
-            <div className="absolute left-2 top-24 bottom-16 w-8 bg-sky-50/80 border-r-2 border-l border-sky-300/80 rounded-r-xl flex flex-col items-center justify-center space-y-8 text-sky-700 shadow-2xs pointer-events-none">
-              <div className="writing-mode-vertical font-bold text-xs tracking-widest text-sky-800">
-                [왼쪽] 창 문
+            <div className="absolute left-2 top-24 bottom-16 w-12 bg-sky-50/80 border-r-2 border-l border-sky-300/80 rounded-r-xl flex flex-col items-center justify-between py-6 text-sky-700 shadow-2xs pointer-events-none">
+              <div className="w-6 h-8 bg-sky-200/60 rounded border border-sky-300 flex flex-col justify-around p-0.5">
+                <div className="w-full h-0.5 bg-sky-400"></div>
+                <div className="w-full h-0.5 bg-sky-400"></div>
+              </div>
+
+              <div className="-rotate-90 whitespace-nowrap font-extrabold text-xs text-sky-900 tracking-wider bg-sky-100/90 px-2.5 py-1 rounded-full border border-sky-300 shadow-2xs">
+                🪟 [왼쪽] 창문
+              </div>
+
+              <div className="w-6 h-8 bg-sky-200/60 rounded border border-sky-300 flex flex-col justify-around p-0.5">
+                <div className="w-full h-0.5 bg-sky-400"></div>
+                <div className="w-full h-0.5 bg-sky-400"></div>
               </div>
             </div>
 
-            {/* Right Hallway */}
-            <div className="absolute right-2 top-24 bottom-16 w-8 bg-amber-50/80 border-l-2 border-r border-amber-300/80 rounded-l-xl flex flex-col items-center justify-center space-y-8 text-amber-800 shadow-2xs pointer-events-none">
-              <div className="writing-mode-vertical font-bold text-xs tracking-widest text-amber-900">
-                [오른쪽] 복 도
+            {/* Right Hallway & Doors */}
+            <div className="absolute right-2 top-24 bottom-16 w-12 bg-amber-50/80 border-l-2 border-r border-amber-300/80 rounded-l-xl flex flex-col items-center justify-between py-4 text-amber-800 shadow-2xs pointer-events-none">
+              {/* 맨 앞: 앞문 */}
+              <div className="w-9 py-1 bg-amber-200/90 border-2 border-amber-500 rounded-lg text-amber-950 font-black text-[11px] text-center shadow-2xs">
+                앞문
+              </div>
+
+              {/* 중앙: 오른쪽 복도 */}
+              <div className="-rotate-90 whitespace-nowrap font-extrabold text-xs text-amber-900 tracking-wider bg-amber-100/90 px-2.5 py-1 rounded-full border border-amber-300 shadow-2xs">
+                🚪 [오른쪽] 복도
+              </div>
+
+              {/* 맨 뒤: 뒷문 */}
+              <div className="w-9 py-1 bg-amber-200/90 border-2 border-amber-500 rounded-lg text-amber-950 font-black text-[11px] text-center shadow-2xs">
+                뒷문
               </div>
             </div>
 
@@ -462,7 +645,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                         return;
                       }
                       if (!selectedStudentId) {
-                        alert('먼저 위에서 본인 이름을 선택해주세요!');
+                        alert('먼저 상단 드롭다운에서 본인 이름을 선택해주세요!');
                         return;
                       }
                       if (desk.isLocked) {
@@ -473,6 +656,17 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                         alert(`이미 ${claim.studentName} 학생이 응모한 자리입니다.`);
                         return;
                       }
+                      if (isClaimedByMe) {
+                        // Clicking own seat opens cancel dialog
+                        setIsCancelModalOpen(true);
+                        return;
+                      }
+                      if (currentStudentDesk) {
+                        // Already holds a seat, clicking another vacant seat -> opens swap confirm modal
+                        setSwapConfirmDesk(desk);
+                        return;
+                      }
+                      // Holds no seat, clicking vacant seat -> opens claim confirm modal
                       setConfirmDesk(desk);
                     }}
                     className={`absolute rounded-2xl border-2 transition-all duration-200 flex flex-col justify-between p-2.5 shadow-sm ${
@@ -510,7 +704,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                       {isClaimedByMe ? (
                         <div>
                           <span className="inline-block bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded mb-0.5">
-                            ⭐ 내 자리
+                            ⭐ 내 자리 (클릭시 취소)
                           </span>
                           <div className="font-black text-slate-900 text-base leading-tight truncate">
                             {claim.studentName}
@@ -537,7 +731,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                     {/* Action Hint */}
                     {isVacant && !desk.isLocked && ticketingState.isOpen && (
                       <div className="text-[10px] text-center font-bold text-emerald-800 bg-emerald-200/70 rounded py-0.5">
-                        클릭하여 응모
+                        {currentStudentDesk ? '이 자리로 변경' : '클릭하여 응모'}
                       </div>
                     )}
                   </div>
@@ -597,7 +791,69 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
         )}
       </div>
 
-      {/* Confirmation Modal */}
+      {/* 1. PIN Verification Modal */}
+      {pinModalStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 mx-auto flex items-center justify-center text-2xl font-black">
+                🔒
+              </div>
+              <h3 className="text-xl font-black text-slate-900">학생 본인 확인 (PIN 인증)</h3>
+              <p className="text-xs text-slate-600">
+                <span className="font-bold text-indigo-600">[{pinModalStudent.name}]</span> 학생의 4자리 비밀번호(PIN)를 입력하세요.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyPinSubmit} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  maxLength={4}
+                  autoFocus
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value);
+                    setPinError(null);
+                  }}
+                  placeholder="비밀번호 4자리 (예: 1234)"
+                  className="w-full text-center tracking-widest text-2xl font-black p-3 bg-slate-50 border-2 border-indigo-300 focus:border-indigo-600 rounded-2xl focus:outline-none transition font-mono"
+                />
+                <p className="text-[11px] text-slate-400 text-center mt-1">
+                  * 초기 기본 비밀번호는 <span className="font-mono font-bold text-indigo-600">1234</span> 입니다.
+                </p>
+              </div>
+
+              {pinError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl text-center">
+                  {pinError}
+                </div>
+              )}
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinModalStudent(null);
+                    setSelectedStudentId('');
+                  }}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-md shadow-indigo-500/20"
+                >
+                  본인 인증 및 선택
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. New Seat Confirmation Modal */}
       {confirmDesk && currentStudent && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 animate-in fade-in zoom-in duration-150">
@@ -641,6 +897,97 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               >
                 <Sparkles className="w-4 h-4" />
                 <span>티켓팅 응모 확정!</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Seat Swap Confirmation Modal */}
+      {swapConfirmDesk && currentStudent && currentStudentDesk && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 animate-in fade-in zoom-in duration-150">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-600 mx-auto flex items-center justify-center text-3xl font-extrabold shadow-inner">
+                🔄
+              </div>
+              <h3 className="text-2xl font-black text-slate-900">자리 변경 확인</h3>
+              <p className="text-sm text-slate-600">
+                기존 응모 자리를 취소하고 새 자리로 변경하시겠습니까?
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-500 font-medium">기존 자리:</span>
+                <span className="font-extrabold text-slate-500 line-through">
+                  {currentStudentDesk.label}번 자리
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-sm border-t border-slate-200/80 pt-2">
+                <span className="text-slate-500 font-medium">변경할 자리:</span>
+                <span className="font-black text-emerald-600 text-lg bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                  {swapConfirmDesk.label}번 자리 ({swapConfirmDesk.sectionId || 1}분단)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setSwapConfirmDesk(null)}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-100 transition text-sm"
+              >
+                취소
+              </button>
+
+              <button
+                onClick={handleConfirmSwap}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 font-black text-white shadow-lg shadow-emerald-500/30 transition text-sm flex items-center justify-center space-x-1"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                <span>자리 변경 확정!</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Seat Cancellation Modal */}
+      {isCancelModalOpen && currentStudentDesk && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 animate-in fade-in zoom-in duration-150">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 rounded-3xl bg-rose-100 text-rose-600 mx-auto flex items-center justify-center text-3xl font-extrabold shadow-inner">
+                ❌
+              </div>
+              <h3 className="text-2xl font-black text-slate-900">자리 응모 취소</h3>
+              <p className="text-sm text-slate-600">
+                현재 선택한 자리 응모를 정말 취소하시겠습니까?
+              </p>
+            </div>
+
+            <div className="bg-rose-50 rounded-2xl p-4 border border-rose-200 text-center">
+              <span className="text-xs text-rose-600 font-bold block">취소 대상 자리:</span>
+              <span className="font-black text-rose-700 text-xl block mt-1">
+                {currentStudentDesk.label}번 자리
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setIsCancelModalOpen(false)}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-100 transition text-sm"
+              >
+                유지하기
+              </button>
+
+              <button
+                onClick={handleConfirmCancel}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 font-black text-white shadow-lg shadow-rose-600/30 transition text-sm flex items-center justify-center space-x-1"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>네, 응모 취소하기</span>
               </button>
             </div>
           </div>

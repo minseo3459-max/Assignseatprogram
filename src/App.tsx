@@ -17,16 +17,59 @@ import { ExportModal } from './components/ExportModal';
 import { PresetModal } from './components/PresetModal';
 import { AdminPasswordModal } from './components/AdminPasswordModal';
 import { AdminPanel } from './components/AdminPanel';
+import { AdminPasswordChangeModal } from './components/AdminPasswordChangeModal';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'students' | 'layout' | 'assignment' | 'student_ticketing'>('students');
-  const [systemMode, setSystemMode] = useState<SystemMode>('random');
+  // Check URL parameter for dedicated student ticketing link
+  const [isStudentLinkAccess] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get('mode') || params.get('tab') || params.get('ticketing');
+      return modeParam === 'student_ticketing' || modeParam === 'ticketing' || modeParam === 'true' || window.location.hash === '#student_ticketing';
+    } catch {
+      return false;
+    }
+  });
 
-  // Ticketing State
+  const [isTeacherUnlocked, setIsTeacherUnlocked] = useState<boolean>(() => !isStudentLinkAccess);
+  const isStudentOnlyMode = isStudentLinkAccess && !isTeacherUnlocked;
+
+  const [activeTab, setActiveTab] = useState<'students' | 'layout' | 'assignment' | 'student_ticketing'>(() => {
+    if (isStudentLinkAccess) return 'student_ticketing';
+    return 'students';
+  });
+
+  const [systemMode, setSystemMode] = useState<SystemMode>(() => {
+    if (isStudentLinkAccess) return 'ticketing';
+    return 'random';
+  });
+
+  // Class ID state for unique student ticketing links
+  const [classId, setClassId] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const paramId = params.get('classId') || params.get('cid') || params.get('room');
+      if (paramId) return paramId;
+      const saved = localStorage.getItem('classroom_class_id');
+      if (saved) return saved;
+    } catch {
+      // Ignore
+    }
+    const generated = Math.random().toString(36).substring(2, 8).toUpperCase();
+    try {
+      localStorage.setItem('classroom_class_id', generated);
+    } catch {
+      // Ignore
+    }
+    return generated;
+  });
+
+  // Ticketing State per classId
   const [ticketingState, setTicketingState] = useState<TicketingState>(() => {
     try {
-      const saved = localStorage.getItem('classroom_ticketing_v1');
+      const storageKey = `classroom_ticketing_v1_${classId}`;
+      const saved = localStorage.getItem(storageKey) || localStorage.getItem('classroom_ticketing_v1');
       if (saved) return JSON.parse(saved);
     } catch {
       // Ignore
@@ -37,6 +80,29 @@ export default function App() {
       lastUpdated: new Date().toISOString(),
     };
   });
+
+  // Generate new random class link ID
+  const handleGenerateRandomClassId = () => {
+    const newId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    setClassId(newId);
+    try {
+      localStorage.setItem('classroom_class_id', newId);
+    } catch {
+      // Ignore
+    }
+    const newTicketingState: TicketingState = {
+      isOpen: true,
+      claims: {},
+      lastUpdated: new Date().toISOString(),
+    };
+    setTicketingState(newTicketingState);
+    try {
+      localStorage.setItem(`classroom_ticketing_v1_${newId}`, JSON.stringify(newTicketingState));
+    } catch {
+      // Ignore
+    }
+    return newId;
+  };
 
   // Load initial data from localStorage if present
   const [students, setStudents] = useState<Student[]>(() => {
@@ -63,10 +129,28 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
 
-  // Admin Mode States
+  // Admin Password & Admin Mode States
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    try {
+      return localStorage.getItem('classroom_admin_password') || '2580';
+    } catch {
+      return '2580';
+    }
+  });
+
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isAdminPasswordModalOpen, setIsAdminPasswordModalOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
+  const handleChangeAdminPassword = (newPassword: string) => {
+    setAdminPassword(newPassword);
+    try {
+      localStorage.setItem('classroom_admin_password', newPassword);
+    } catch {
+      // Ignore
+    }
+  };
 
   const fixedCount = students.filter((s) => s.fixedDeskId).length;
 
@@ -110,18 +194,49 @@ export default function App() {
     }
   }, [presets]);
 
+  // Sync ticketing state to LocalStorage and BroadcastChannel per classId
   useEffect(() => {
+    const storageKey = `classroom_ticketing_v1_${classId}`;
     try {
+      localStorage.setItem(storageKey, JSON.stringify(ticketingState));
       localStorage.setItem('classroom_ticketing_v1', JSON.stringify(ticketingState));
     } catch {
       // Ignore
     }
-  }, [ticketingState]);
 
-  // Real-time cross-tab synchronization listener
+    // Broadcast update across open tabs/windows for this classId
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel(`classroom_ticketing_channel_${classId}`);
+        channel.postMessage({ type: 'TICKETING_UPDATE', payload: ticketingState });
+        channel.close();
+      }
+    } catch {
+      // Ignore
+    }
+  }, [ticketingState, classId]);
+
+  // Listen for BroadcastChannel & storage events for real-time synchronization
   useEffect(() => {
+    let broadcastChannel: BroadcastChannel | null = null;
+    const storageKey = `classroom_ticketing_v1_${classId}`;
+    const channelName = `classroom_ticketing_channel_${classId}`;
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        broadcastChannel = new BroadcastChannel(channelName);
+        broadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'TICKETING_UPDATE' && event.data.payload) {
+            setTicketingState(event.data.payload);
+          }
+        };
+      }
+    } catch {
+      // Ignore
+    }
+
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'classroom_ticketing_v1' && e.newValue) {
+      if ((e.key === storageKey || e.key === 'classroom_ticketing_v1') && e.newValue) {
         try {
           const newState: TicketingState = JSON.parse(e.newValue);
           setTicketingState(newState);
@@ -131,9 +246,30 @@ export default function App() {
       }
     };
 
+    // Periodic check every 1 second to ensure non-missed updates across windows
+    const interval = setInterval(() => {
+      try {
+        const saved = localStorage.getItem(storageKey) || localStorage.getItem('classroom_ticketing_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.lastUpdated !== ticketingState.lastUpdated) {
+            setTicketingState(parsed);
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }, 1000);
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+      if (broadcastChannel) {
+        broadcastChannel.close();
+      }
+    };
+  }, [classId, ticketingState.lastUpdated]);
 
   // Sync desks assignedStudentId when ticketing claims update
   useEffect(() => {
@@ -149,6 +285,30 @@ export default function App() {
       );
     }
   }, [ticketingState.claims, systemMode]);
+
+  const handleTabChange = (tab: 'students' | 'layout' | 'assignment' | 'student_ticketing') => {
+    if (isStudentOnlyMode && tab !== 'student_ticketing') {
+      setIsAdminPasswordModalOpen(true);
+      return;
+    }
+    setActiveTab(tab);
+    if (tab === 'student_ticketing') {
+      setSystemMode('ticketing');
+    }
+    try {
+      const url = new URL(window.location.href);
+      if (tab === 'student_ticketing') {
+        url.searchParams.set('mode', 'student_ticketing');
+      } else {
+        url.searchParams.delete('mode');
+        url.searchParams.delete('tab');
+        url.searchParams.delete('ticketing');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // Ignore
+    }
+  };
 
   const handleRefreshTicketing = () => {
     try {
@@ -231,7 +391,7 @@ export default function App() {
       {/* Top Header Navigation */}
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         studentCount={students.length}
         deskCount={desks.length}
         soundEnabled={soundEnabled}
@@ -251,6 +411,8 @@ export default function App() {
         }}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         isTicketingOpen={ticketingState.isOpen}
+        isStudentOnlyMode={isStudentOnlyMode}
+        onTeacherUnlockRequest={() => setIsAdminPasswordModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -261,9 +423,12 @@ export default function App() {
             students={students}
             setStudents={setStudents}
             desks={desks}
-            onProceedToLayout={() => setActiveTab('layout')}
+            onProceedToLayout={() => handleTabChange('layout')}
             isAdminMode={isAdminMode}
+            adminPassword={adminPassword}
             onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+            onOpenAdminPasswordModal={() => setIsAdminPasswordModalOpen(true)}
+            onOpenChangePasswordModal={() => setIsChangePasswordModalOpen(true)}
           />
         )}
 
@@ -276,7 +441,7 @@ export default function App() {
               desks={desks}
               setDesks={setDesks}
               studentCount={students.length}
-              onProceedToAssignment={() => setActiveTab('assignment')}
+              onProceedToAssignment={() => handleTabChange('assignment')}
             />
 
             {/* Interactive Classroom Canvas in Layout Mode */}
@@ -300,13 +465,15 @@ export default function App() {
               students={students}
               desks={desks}
               setDesks={setDesks}
-              onGoToLayout={() => setActiveTab('layout')}
+              onGoToLayout={() => handleTabChange('layout')}
               systemMode={systemMode}
               setSystemMode={setSystemMode}
               ticketingState={ticketingState}
               setTicketingState={setTicketingState}
               onRefreshTicketing={handleRefreshTicketing}
-              onOpenStudentView={() => setActiveTab('student_ticketing')}
+              onOpenStudentView={() => handleTabChange('student_ticketing')}
+              classId={classId}
+              onGenerateRandomLink={handleGenerateRandomClassId}
             />
 
             {/* Interactive Classroom Canvas in Assignment Mode */}
@@ -334,7 +501,14 @@ export default function App() {
             ticketingState={ticketingState}
             onUpdateTicketingState={setTicketingState}
             onRefreshData={handleRefreshTicketing}
-            onSwitchToTeacherView={() => setActiveTab('assignment')}
+            isStudentOnlyMode={isStudentOnlyMode}
+            onSwitchToTeacherView={() => {
+              if (isStudentOnlyMode) {
+                setIsAdminPasswordModalOpen(true);
+              } else {
+                handleTabChange('assignment');
+              }
+            }}
           />
         )}
       </main>
@@ -359,9 +533,12 @@ export default function App() {
       <AdminPasswordModal
         isOpen={isAdminPasswordModalOpen}
         onClose={() => setIsAdminPasswordModalOpen(false)}
+        adminPassword={adminPassword}
         onSuccess={() => {
           setIsAdminMode(true);
+          setIsTeacherUnlocked(true);
           setIsAdminPanelOpen(true);
+          soundManager.playFanfare();
         }}
       />
 
@@ -375,6 +552,14 @@ export default function App() {
           setIsAdminMode(false);
           setIsAdminPanelOpen(false);
         }}
+        onOpenChangePasswordModal={() => setIsChangePasswordModalOpen(true)}
+      />
+
+      <AdminPasswordChangeModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+        adminPassword={adminPassword}
+        onChangePassword={handleChangeAdminPassword}
       />
 
       {/* Footer with Secret Trigger Icon */}

@@ -154,17 +154,13 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
       >
         {/* ================= 1. 맨 앞: 칠판 (Blackboard) & 교탁 ================= */}
         <div className="w-full flex flex-col items-center mb-8 relative">
-          <div className="w-11/12 max-w-2xl bg-slate-800 text-slate-100 rounded-xl py-3 px-6 shadow-md border-4 border-amber-900 flex items-center justify-between relative overflow-hidden">
+          <div className="w-11/12 max-w-2xl bg-slate-800 text-slate-100 rounded-xl py-3 px-6 shadow-md border-4 border-amber-900 flex items-center justify-center relative overflow-hidden">
             {/* Blackboard chalk background texture overlay */}
             <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
 
-            <div className="flex items-center space-x-2 font-bold text-sm tracking-wider text-emerald-300">
+            <div className="flex items-center space-x-2 font-bold text-sm sm:text-base tracking-wider text-emerald-300 text-center">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>[맨 앞] 칠 판 (BLACKBOARD)</span>
-            </div>
-
-            <div className="text-xs text-slate-300 font-mono">
-              ★ 바른 자세 · 즐거운 배움 ★
+              <span>칠 판 (BLACKBOARD)</span>
             </div>
           </div>
 
@@ -178,29 +174,43 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
         </div>
 
         {/* ================= 2. 왼쪽: 창문 (Window) ================= */}
-        <div className="absolute left-2 top-24 bottom-16 w-8 bg-sky-50/80 border-r-2 border-l border-sky-300/80 rounded-r-xl flex flex-col items-center justify-center space-y-8 text-sky-700 shadow-2xs pointer-events-none">
-          <div className="writing-mode-vertical font-bold text-xs tracking-widest text-sky-800 flex items-center space-x-1">
-            <span>[왼쪽] 창 문</span>
+        <div className="absolute left-2 top-24 bottom-16 w-12 bg-sky-50/80 border-r-2 border-l border-sky-300/80 rounded-r-xl flex flex-col items-center justify-between py-6 text-sky-700 shadow-2xs pointer-events-none">
+          <div className="w-6 h-8 bg-sky-200/60 rounded border border-sky-300 flex flex-col justify-around p-0.5">
+            <div className="w-full h-0.5 bg-sky-400"></div>
+            <div className="w-full h-0.5 bg-sky-400"></div>
           </div>
-          <div className="w-4 h-12 bg-sky-200/60 rounded-md border border-sky-300 flex flex-col justify-around p-0.5">
+
+          <div className="-rotate-90 whitespace-nowrap font-extrabold text-xs text-sky-900 tracking-wider bg-sky-100/90 px-2.5 py-1 rounded-full border border-sky-300 shadow-2xs">
+            🪟 [왼쪽] 창문
+          </div>
+
+          <div className="w-6 h-8 bg-sky-200/60 rounded border border-sky-300 flex flex-col justify-around p-0.5">
             <div className="w-full h-0.5 bg-sky-400"></div>
             <div className="w-full h-0.5 bg-sky-400"></div>
           </div>
         </div>
 
-        {/* ================= 3. 오른쪽: 복도 (Hallway) ================= */}
-        <div className="absolute right-2 top-24 bottom-16 w-8 bg-amber-50/80 border-l-2 border-r border-amber-300/80 rounded-l-xl flex flex-col items-center justify-center space-y-8 text-amber-800 shadow-2xs pointer-events-none">
-          <div className="writing-mode-vertical font-bold text-xs tracking-widest text-amber-900">
-            <span>[오른쪽] 복 도</span>
+        {/* ================= 3. 오른쪽: 복도 (Hallway) & 앞문/뒷문 ================= */}
+        <div className="absolute right-2 top-24 bottom-16 w-12 bg-amber-50/80 border-l-2 border-r border-amber-300/80 rounded-l-xl flex flex-col items-center justify-between py-4 text-amber-800 shadow-2xs pointer-events-none">
+          {/* 맨 앞: 앞문 */}
+          <div className="w-9 py-1 bg-amber-200/90 border-2 border-amber-500 rounded-lg text-amber-950 font-black text-[11px] text-center shadow-2xs">
+            앞문
           </div>
-          <div className="w-4 h-10 border-2 border-amber-400 rounded-sm bg-amber-100/80 flex items-center justify-center text-[9px] font-bold">
-            문
+
+          {/* 중앙: 오른쪽 복도 */}
+          <div className="-rotate-90 whitespace-nowrap font-extrabold text-xs text-amber-900 tracking-wider bg-amber-100/90 px-2.5 py-1 rounded-full border border-amber-300 shadow-2xs">
+            🚪 [오른쪽] 복도
+          </div>
+
+          {/* 맨 뒤: 뒷문 */}
+          <div className="w-9 py-1 bg-amber-200/90 border-2 border-amber-500 rounded-lg text-amber-950 font-black text-[11px] text-center shadow-2xs">
+            뒷문
           </div>
         </div>
 
-        {/* ================= 4. 뒤쪽: 사물함 / 뒷문 ================= */}
+        {/* ================= 4. 뒤쪽: 사물함 ================= */}
         <div className="absolute bottom-2 left-16 right-16 h-6 border-t border-slate-200 bg-slate-100/80 rounded-t-lg flex items-center justify-center text-[11px] text-slate-500 font-medium">
-          [뒤쪽] 사물함 및 뒷문
+          [뒤쪽] 사물함
         </div>
 
         {/* ================= Classroom Desks Canvas Area ================= */}

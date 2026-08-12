@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Desk } from '../types';
 import { parseStudentsFromText } from '../utils/classroom';
-import { UserPlus, Trash2, UserCheck, UserX, ArrowRight, FileText, CheckCircle2, Sliders, Info, Users, ShieldCheck } from 'lucide-react';
+import { UserPlus, Trash2, UserCheck, UserX, ArrowRight, FileText, CheckCircle2, Sliders, Info, Users, ShieldCheck, KeyRound, Copy, Sparkles, X } from 'lucide-react';
 
 interface StudentManagerProps {
   students: Student[];
@@ -9,7 +9,10 @@ interface StudentManagerProps {
   desks?: Desk[];
   onProceedToLayout: () => void;
   isAdminMode?: boolean;
+  adminPassword?: string;
   onOpenAdminPanel?: () => void;
+  onOpenAdminPasswordModal?: () => void;
+  onOpenChangePasswordModal?: () => void;
 }
 
 export const StudentManager: React.FC<StudentManagerProps> = ({
@@ -18,12 +21,72 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   desks = [],
   onProceedToLayout,
   isAdminMode,
+  adminPassword = '2580',
   onOpenAdminPanel,
+  onOpenAdminPasswordModal,
+  onOpenChangePasswordModal,
 }) => {
   const [inputText, setInputText] = useState('');
   const [singleNameInput, setSingleNameInput] = useState('');
   const [singleGenderInput, setSingleGenderInput] = useState<'male' | 'female' | 'unspecified'>('unspecified');
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [showPasswordPromptModal, setShowPasswordPromptModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [pinCopyToast, setPinCopyToast] = useState(false);
+
+  // Handle PIN button click with password check
+  const handleOpenPinManager = () => {
+    if (isAdminMode) {
+      setShowPinModal(true);
+    } else {
+      setAdminPasswordInput('');
+      setPasswordError(null);
+      setShowPasswordPromptModal(true);
+    }
+  };
+
+  // Verify admin password
+  const handleAdminPasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPasswordInput === adminPassword) {
+      setShowPasswordPromptModal(false);
+      setShowPinModal(true);
+    } else {
+      setPasswordError('비밀번호가 올바르지 않습니다.');
+    }
+  };
+
+  // Set all students PIN to '1234'
+  const handleResetPins1234 = () => {
+    setStudents((prev) => prev.map((s) => ({ ...s, pin: '1234' })));
+  };
+
+  // Generate sequence PINs (1001, 1002...)
+  const handleAutoSeqPins = () => {
+    setStudents((prev) =>
+      prev.map((s, idx) => ({
+        ...s,
+        pin: (1001 + idx).toString(),
+      }))
+    );
+  };
+
+  // Copy PIN table to clipboard
+  const handleCopyPinList = () => {
+    const listText = students
+      .map((s, idx) => `${idx + 1}번: ${s.name} (비밀번호: ${s.pin || '1234'})`)
+      .join('\n');
+
+    try {
+      navigator.clipboard.writeText(`[우리반 자리 배정 PIN 안내표]\n${listText}`);
+      setPinCopyToast(true);
+      setTimeout(() => setPinCopyToast(false), 2500);
+    } catch {
+      alert('클립보드 복사에 실패했습니다.');
+    }
+  };
 
   // Bulk add students from text
   const handleBatchAdd = () => {
@@ -78,7 +141,34 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   // Toggle front row preference
   const handleToggleFrontRow = (id: string) => {
     setStudents((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, frontRowOnly: !s.frontRowOnly } : s))
+      prev.map((s) => {
+        if (s.id === id) {
+          const nextVal = !s.frontRowOnly;
+          return {
+            ...s,
+            frontRowOnly: nextVal,
+            backRowOnly: nextVal ? false : s.backRowOnly,
+          };
+        }
+        return s;
+      })
+    );
+  };
+
+  // Toggle back row preference
+  const handleToggleBackRow = (id: string) => {
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id === id) {
+          const nextVal = !s.backRowOnly;
+          return {
+            ...s,
+            backRowOnly: nextVal,
+            frontRowOnly: nextVal ? false : s.frontRowOnly,
+          };
+        }
+        return s;
+      })
     );
   };
 
@@ -93,6 +183,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const maleCount = students.filter((s) => s.gender === 'male' && !s.isAbsent).length;
   const femaleCount = students.filter((s) => s.gender === 'female' && !s.isAbsent).length;
   const frontRowReqCount = students.filter((s) => s.frontRowOnly && !s.isAbsent).length;
+  const backRowReqCount = students.filter((s) => s.backRowOnly && !s.isAbsent).length;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -110,27 +201,35 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleOpenPinManager}
+            className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl transition shadow-md shadow-indigo-600/20 cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4 text-amber-300" />
+            <span>🔑 학생 PIN 관리</span>
+          </button>
+
           <button
             onClick={() => setShowBatchModal(true)}
             className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium text-sm rounded-xl border border-indigo-200 transition"
           >
             <FileText className="w-4 h-4" />
-            <span>명단 한 번에 붙여넣기</span>
+            <span>명단 붙여넣기</span>
           </button>
 
           <button
             onClick={onProceedToLayout}
-            className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-indigo-600/20 transition transform hover:-translate-y-0.5"
+            className="flex items-center space-x-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md transition transform hover:-translate-y-0.5"
           >
-            <span>다음: 자리 배치 조정</span>
+            <span>다음: 자리 배치</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs text-slate-500 font-medium">참석 학생</div>
           <div className="text-2xl font-bold text-slate-900 mt-0.5">{activeCount}명</div>
@@ -146,6 +245,10 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs text-amber-600 font-medium">앞자리 선호</div>
           <div className="text-2xl font-bold text-amber-700 mt-0.5">{frontRowReqCount}명</div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div className="text-xs text-purple-600 font-medium">뒷자리 선호</div>
+          <div className="text-2xl font-bold text-purple-700 mt-0.5">{backRowReqCount}명</div>
         </div>
       </div>
 
@@ -257,12 +360,25 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         onClick={() => handleToggleFrontRow(student.id)}
                         className={`text-[10px] font-medium px-1.5 py-0.5 rounded transition ${
                           student.frontRowOnly
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300 font-bold'
                             : 'bg-slate-100 text-slate-400 hover:text-slate-600'
                         }`}
                         title="앞자리 우선 배치 설정"
                       >
                         {student.frontRowOnly ? '★ 앞자리' : '앞자리'}
+                      </button>
+
+                      {/* Back Row Toggle */}
+                      <button
+                        onClick={() => handleToggleBackRow(student.id)}
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded transition ${
+                          student.backRowOnly
+                            ? 'bg-purple-100 text-purple-800 border border-purple-300 font-bold'
+                            : 'bg-slate-100 text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="뒷자리 우선 배치 설정"
+                      >
+                        {student.backRowOnly ? '★ 뒷자리' : '뒷자리'}
                       </button>
                     </div>
                   </div>
@@ -325,6 +441,159 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 명단 추가하기
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Management Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                  🔑
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">학생 비밀번호(PIN) 관리</h3>
+                  <p className="text-xs text-slate-500">학생들이 다른 친구 이름으로 응모하는 부정행위를 방지합니다.</p>
+                </div>
+              </div>
+
+              {pinCopyToast && (
+                <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full border border-emerald-300 animate-pulse">
+                  ✅ 안내표 복사완료!
+                </span>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                onClick={handleResetPins1234}
+                className="p-3 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition"
+              >
+                <div className="text-indigo-600 font-extrabold mb-0.5">전체 1234로 초기화</div>
+                <div className="text-[10px] text-slate-500 font-normal">모든 학생 PIN: 1234</div>
+              </button>
+
+              <button
+                onClick={handleAutoSeqPins}
+                className="p-3 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition"
+              >
+                <div className="text-indigo-600 font-extrabold mb-0.5">연번 생성 (1001~)</div>
+                <div className="text-[10px] text-slate-500 font-normal">1001, 1002, 1003...</div>
+              </button>
+
+              <button
+                onClick={handleCopyPinList}
+                className="p-3 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl text-xs font-bold text-center transition shadow-sm flex flex-col items-center justify-center"
+              >
+                <div className="flex items-center space-x-1 font-black">
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>PIN 안내표 복사</span>
+                </div>
+                <div className="text-[10px] text-emerald-100 font-normal">클립보드에 명단 저장</div>
+              </button>
+            </div>
+
+            {/* Student PIN Edit Table */}
+            <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-2xl p-2 bg-slate-50 divide-y divide-slate-200">
+              {students.map((s, idx) => (
+                <div key={s.id} className="flex items-center justify-between py-2 px-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 w-6">{idx + 1}.</span>
+                    <span className="text-sm font-bold text-slate-800">{s.name}</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-slate-400 font-medium">PIN:</span>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={s.pin || '1234'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStudents((prev) =>
+                          prev.map((item) => (item.id === s.id ? { ...item, pin: val } : item))
+                        );
+                      }}
+                      className="w-20 text-center py-1 px-2 bg-white border border-slate-300 font-mono font-bold text-xs rounded-lg focus:outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowPinModal(false)}
+                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition"
+              >
+                닫기 및 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Password Prompt Modal for Student PIN Management */}
+      {showPasswordPromptModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center space-x-2 text-indigo-700 font-bold text-base">
+                <KeyRound className="w-5 h-5 text-indigo-600" />
+                <span>관리자 비밀번호 확인</span>
+              </div>
+              <button
+                onClick={() => setShowPasswordPromptModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              학생 PIN 정보를 수정하거나 안내표를 복사하려면 관리자 비밀번호를 입력하세요.
+            </p>
+
+            <form onSubmit={handleAdminPasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  관리자 비밀번호
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="비밀번호 입력"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-center text-lg font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                />
+              </div>
+
+              {passwordError && (
+                <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl text-center font-medium">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordPromptModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow-md shadow-indigo-600/20"
+                >
+                  확인
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

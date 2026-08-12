@@ -4,7 +4,9 @@ export interface Student {
   gender?: 'male' | 'female' | 'unspecified';
   fixedDeskId?: string | null; // ID of desk if fixed to specific location
   frontRowOnly?: boolean; // Must be placed in front row
+  backRowOnly?: boolean; // Must be placed in back row
   isAbsent?: boolean;
+  pin?: string; // 4-digit PIN for anti-impersonation verification
 }
 
 export interface Position {

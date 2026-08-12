@@ -2,30 +2,30 @@ import { Desk, Student, ClassroomConfig, AssignmentMode } from '../types';
 import { toPng } from 'html-to-image';
 
 export const DEFAULT_STUDENTS: Student[] = [
-  { id: 's1', name: '강민준', gender: 'male' },
-  { id: 's2', name: '김서연', gender: 'female' },
-  { id: 's3', name: '박도윤', gender: 'male' },
-  { id: 's4', name: '이하은', gender: 'female' },
-  { id: 's5', name: '정시우', gender: 'male' },
-  { id: 's6', name: '최지우', gender: 'female' },
-  { id: 's7', name: '윤하준', gender: 'male' },
-  { id: 's8', name: '장수아', gender: 'female' },
-  { id: 's9', name: '임건우', gender: 'male' },
-  { id: 's10', name: '한지민', gender: 'female' },
-  { id: 's11', name: '오현우', gender: 'male' },
-  { id: 's12', name: '서아린', gender: 'female' },
-  { id: 's13', name: '신우진', gender: 'male' },
-  { id: 's14', name: '권예은', gender: 'female' },
-  { id: 's15', name: '황지호', gender: 'male' },
-  { id: 's16', name: '송유나', gender: 'female' },
-  { id: 's17', name: '안민재', gender: 'male' },
-  { id: 's18', name: '류하윤', gender: 'female' },
-  { id: 's19', name: '전준서', gender: 'male' },
-  { id: 's20', name: '홍채원', gender: 'female' },
-  { id: 's21', name: '고태양', gender: 'male' },
-  { id: 's22', name: '문다은', gender: 'female' },
-  { id: 's23', name: '양주원', gender: 'male' },
-  { id: 's24', name: '백나은', gender: 'female' },
+  { id: 's1', name: '강민준', gender: 'male', pin: '1234' },
+  { id: 's2', name: '김서연', gender: 'female', pin: '1234' },
+  { id: 's3', name: '박도윤', gender: 'male', pin: '1234' },
+  { id: 's4', name: '이하은', gender: 'female', pin: '1234' },
+  { id: 's5', name: '정시우', gender: 'male', pin: '1234' },
+  { id: 's6', name: '최지우', gender: 'female', pin: '1234' },
+  { id: 's7', name: '윤하준', gender: 'male', pin: '1234' },
+  { id: 's8', name: '장수아', gender: 'female', pin: '1234' },
+  { id: 's9', name: '임건우', gender: 'male', pin: '1234' },
+  { id: 's10', name: '한지민', gender: 'female', pin: '1234' },
+  { id: 's11', name: '오현우', gender: 'male', pin: '1234' },
+  { id: 's12', name: '서아린', gender: 'female', pin: '1234' },
+  { id: 's13', name: '신우진', gender: 'male', pin: '1234' },
+  { id: 's14', name: '권예은', gender: 'female', pin: '1234' },
+  { id: 's15', name: '황지호', gender: 'male', pin: '1234' },
+  { id: 's16', name: '송유나', gender: 'female', pin: '1234' },
+  { id: 's17', name: '안민재', gender: 'male', pin: '1234' },
+  { id: 's18', name: '류하윤', gender: 'female', pin: '1234' },
+  { id: 's19', name: '전준서', gender: 'male', pin: '1234' },
+  { id: 's20', name: '홍채원', gender: 'female', pin: '1234' },
+  { id: 's21', name: '고태양', gender: 'male', pin: '1234' },
+  { id: 's22', name: '문다은', gender: 'female', pin: '1234' },
+  { id: 's23', name: '양주원', gender: 'male', pin: '1234' },
+  { id: 's24', name: '백나은', gender: 'female', pin: '1234' },
 ];
 
 export const DEFAULT_CONFIG: ClassroomConfig = {
@@ -178,6 +178,25 @@ export function assignSeatsRandomly(
     unassignedStudents = activeStudents.filter((s) => !assignedStudentIds.has(s.id));
   }
 
+  // 3. Handle Back Row preference if requested
+  const backRowStudents = unassignedStudents.filter((s) => s.backRowOnly);
+  if (backRowStudents.length > 0) {
+    // Sort available desks by Y coordinate descending (bottom-most/largest Y are back row)
+    availableDesks.sort((a, b) => b.y - a.y);
+
+    const shuffledBackStudents = shuffleArray(backRowStudents);
+
+    shuffledBackStudents.forEach((student) => {
+      if (availableDesks.length > 0) {
+        const desk = availableDesks.shift()!;
+        assignmentMap.set(desk.id, student.id);
+        assignedStudentIds.add(student.id);
+      }
+    });
+
+    unassignedStudents = activeStudents.filter((s) => !assignedStudentIds.has(s.id));
+  }
+
   // 3. Gender Alternate Mode vs Random Mode
   if (mode === 'gender_alternate') {
     const males = shuffleArray(unassignedStudents.filter((s) => s.gender === 'male'));
@@ -281,6 +300,7 @@ export function parseStudentsFromText(text: string): Student[] {
       id: `std_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
       name: cleanName || name,
       gender,
+      pin: '1234',
     };
   });
 }

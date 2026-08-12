@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Desk } from '../types';
 import { DESK_WIDTH, DESK_HEIGHT } from '../utils/classroom';
-import { ShieldCheck, Trash2, X, Sparkles, Monitor } from 'lucide-react';
+import { ShieldCheck, Trash2, X, Sparkles, Monitor, KeyRound } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
 interface AdminPanelProps {
@@ -11,6 +11,7 @@ interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onExitAdminMode: () => void;
+  onOpenChangePasswordModal?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -20,6 +21,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   onClose,
   onExitAdminMode,
+  onOpenChangePasswordModal,
 }) => {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
@@ -105,6 +107,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            {onOpenChangePasswordModal && (
+              <button
+                onClick={onOpenChangePasswordModal}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 transition"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                <span>비밀번호 변경</span>
+              </button>
+            )}
             <button
               onClick={onExitAdminMode}
               className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-xl border border-rose-200 transition"
