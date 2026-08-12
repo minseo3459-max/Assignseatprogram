@@ -24,7 +24,7 @@ interface ClassroomData {
   lastUpdated: string;
 }
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const DATA_FILE = path.join(process.cwd(), 'classrooms_data.json');
 
 // In-memory classroom database
@@ -76,6 +76,18 @@ function broadcastToClass(classId: string, payload: any) {
 
 async function startServer() {
   const app = express();
+
+  // Enable CORS for cross-origin requests (Vercel, Electron, local apps)
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '10mb' }));
 
   // API Routes

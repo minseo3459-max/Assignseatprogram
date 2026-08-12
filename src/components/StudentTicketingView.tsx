@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Desk, Student, ClassroomConfig, TicketingState, TicketingClaim } from '../types';
 import { soundManager } from '../utils/sound';
+import { getApiUrl } from '../utils/apiConfig';
 import confetti from 'canvas-confetti';
 import {
   Ticket,
@@ -194,7 +195,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     // Attempt claim via Server API for real-time atomic claim
     if (classId) {
       try {
-        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+        const res = await fetch(getApiUrl(`/api/classrooms/${classId}/claim`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -297,7 +298,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     if (classId) {
       try {
-        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+        const res = await fetch(getApiUrl(`/api/classrooms/${classId}/claim`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -396,7 +397,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     if (classId) {
       try {
-        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+        const res = await fetch(getApiUrl(`/api/classrooms/${classId}/claim`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Desk, TicketingState, TicketingClaim } from '../types';
 import { soundManager } from '../utils/sound';
+import { getApiUrl } from '../utils/apiConfig';
 import { ShareLinkModal } from './ShareLinkModal';
 import {
   Ticket,
@@ -124,7 +125,7 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
     if (window.confirm('모든 학생의 티켓팅 응모 내역을 초기화하시겠습니까?')) {
       if (classId) {
         try {
-          const res = await fetch(`/api/classrooms/${classId}/reset-claims`, {
+          const res = await fetch(getApiUrl(`/api/classrooms/${classId}/reset-claims`), {
             method: 'POST',
           });
           if (res.ok) {
@@ -158,7 +159,7 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
       const claim = ticketingState.claims[deskId];
       if (classId && claim) {
         try {
-          const res = await fetch(`/api/classrooms/${classId}/claim`, {
+          const res = await fetch(getApiUrl(`/api/classrooms/${classId}/claim`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

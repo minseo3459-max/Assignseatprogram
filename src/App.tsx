@@ -6,6 +6,7 @@ import {
   generateDesksFromConfig,
 } from './utils/classroom';
 import { soundManager } from './utils/sound';
+import { getApiUrl } from './utils/apiConfig';
 
 import { Header } from './components/Header';
 import { StudentManager } from './components/StudentManager';
@@ -269,7 +270,7 @@ export default function App() {
   // Server API Synchronization
   const fetchClassroomData = async () => {
     try {
-      const res = await fetch(`/api/classrooms/${classId}`);
+      const res = await fetch(getApiUrl(`/api/classrooms/${classId}`));
       if (res.ok) {
         const data = await res.json();
         applyServerData(data);
@@ -293,7 +294,7 @@ export default function App() {
       }
       lastKnownDataRef.current = dataStr;
 
-      await fetch(`/api/classrooms/${classId}`, {
+      await fetch(getApiUrl(`/api/classrooms/${classId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: dataStr,
@@ -309,7 +310,7 @@ export default function App() {
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource(`/api/classrooms/${classId}/stream`);
+      eventSource = new EventSource(getApiUrl(`/api/classrooms/${classId}/stream`));
       eventSource.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
@@ -424,7 +425,7 @@ export default function App() {
 
   const handleRefreshTicketing = async () => {
     try {
-      const res = await fetch(`/api/classrooms/${classId}`);
+      const res = await fetch(getApiUrl(`/api/classrooms/${classId}`));
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.students)) setStudents(data.students);
