@@ -1,0 +1,6 @@
+{
+  "name": "자리 배정 시스템",
+  "description": "학생 자리 배치 설정, 랜덤 자리 배정, 드래그 앤 드롭 이동 및 이미지 다운로드 기능을 제공하는 자리 배치 프로그램",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
