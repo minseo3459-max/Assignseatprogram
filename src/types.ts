@@ -49,4 +49,18 @@ export interface ClassroomPreset {
 
 export type AssignmentMode = 'random' | 'gender_alternate' | 'front_preference';
 
+export type SystemMode = 'random' | 'ticketing';
+
 export type ShuffleAnimationSpeed = 'instant' | 'fast' | 'dramatic' | 'sequential';
+
+export interface TicketingClaim {
+  studentId: string;
+  studentName: string;
+  claimedAt: string;
+}
+
+export interface TicketingState {
+  isOpen: boolean;
+  claims: Record<string, TicketingClaim>; // key: deskId
+  lastUpdated: string;
+}

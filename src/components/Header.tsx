@@ -1,9 +1,9 @@
 import React from 'react';
-import { LayoutGrid, Users, Sparkles, Download, Volume2, VolumeX, RefreshCw, Save, FolderOpen, Grid3X3, ShieldCheck, KeyRound } from 'lucide-react';
+import { LayoutGrid, Users, Sparkles, Download, Volume2, VolumeX, RefreshCw, Save, FolderOpen, Grid3X3, ShieldCheck, KeyRound, Ticket } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'students' | 'layout' | 'assignment';
-  setActiveTab: (tab: 'students' | 'layout' | 'assignment') => void;
+  activeTab: 'students' | 'layout' | 'assignment' | 'student_ticketing';
+  setActiveTab: (tab: 'students' | 'layout' | 'assignment' | 'student_ticketing') => void;
   studentCount: number;
   deskCount: number;
   soundEnabled: boolean;
@@ -16,6 +16,7 @@ interface HeaderProps {
   fixedCount: number;
   onOpenAdminModal: () => void;
   onOpenAdminPanel: () => void;
+  isTicketingOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   fixedCount,
   onOpenAdminModal,
   onOpenAdminPanel,
+  isTicketingOpen,
 }) => {
   return (
     <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
@@ -57,12 +59,12 @@ export const Header: React.FC<HeaderProps> = ({
                   <KeyRound className="w-3 h-3 opacity-40 hover:opacity-100" />
                 </button>
               </div>
-              <p className="text-xs text-slate-400">자유로운 배치 · 랜덤 배정 · 드래그 앤 드롭 · 이미지 저장</p>
+              <p className="text-xs text-slate-400">자유로운 배치 · 랜덤 배정 · 실시간 티켓팅 · 이미지 저장</p>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 self-start md:self-center">
+          <div className="flex flex-wrap items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 self-start md:self-center">
             <button
               onClick={() => setActiveTab('students')}
               className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -96,7 +98,22 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              <span>3. 자리 배정</span>
+              <span>3. 자리 배정 & 티켓팅</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('student_ticketing')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                activeTab === 'student_ticketing'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-sm'
+                  : 'text-emerald-300 hover:text-white hover:bg-emerald-950/40'
+              }`}
+            >
+              <Ticket className="w-4 h-4 text-emerald-300" />
+              <span>🎟️ 학생 응모 창</span>
+              {isTicketingOpen && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              )}
             </button>
           </div>
 

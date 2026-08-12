@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Student, Desk, ClassroomConfig, ClassroomPreset } from './types';
+import { Student, Desk, ClassroomConfig, ClassroomPreset, SystemMode, TicketingState } from './types';
 import {
   DEFAULT_STUDENTS,
   DEFAULT_CONFIG,
@@ -12,6 +12,7 @@ import { StudentManager } from './components/StudentManager';
 import { LayoutEditor } from './components/LayoutEditor';
 import { ClassroomCanvas } from './components/ClassroomCanvas';
 import { AssignmentControl } from './components/AssignmentControl';
+import { StudentTicketingView } from './components/StudentTicketingView';
 import { ExportModal } from './components/ExportModal';
 import { PresetModal } from './components/PresetModal';
 import { AdminPasswordModal } from './components/AdminPasswordModal';
@@ -19,7 +20,23 @@ import { AdminPanel } from './components/AdminPanel';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'students' | 'layout' | 'assignment'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'layout' | 'assignment' | 'student_ticketing'>('students');
+  const [systemMode, setSystemMode] = useState<SystemMode>('random');
+
+  // Ticketing State
+  const [ticketingState, setTicketingState] = useState<TicketingState>(() => {
+    try {
+      const saved = localStorage.getItem('classroom_ticketing_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // Ignore
+    }
+    return {
+      isOpen: true,
+      claims: {},
+      lastUpdated: new Date().toISOString(),
+    };
+  });
 
   // Load initial data from localStorage if present
   const [students, setStudents] = useState<Student[]>(() => {
@@ -65,7 +82,7 @@ export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = '자리 배정 시스템';
+    document.title = '자리 배정 및 실시간 티켓팅 시스템';
   }, []);
 
   // Sync state to LocalStorage
@@ -92,6 +109,57 @@ export default function App() {
       // Ignore
     }
   }, [presets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('classroom_ticketing_v1', JSON.stringify(ticketingState));
+    } catch {
+      // Ignore
+    }
+  }, [ticketingState]);
+
+  // Real-time cross-tab synchronization listener
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'classroom_ticketing_v1' && e.newValue) {
+        try {
+          const newState: TicketingState = JSON.parse(e.newValue);
+          setTicketingState(newState);
+        } catch {
+          // Ignore
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Sync desks assignedStudentId when ticketing claims update
+  useEffect(() => {
+    if (systemMode === 'ticketing') {
+      setDesks((prevDesks) =>
+        prevDesks.map((d) => {
+          const claim = ticketingState.claims[d.id];
+          return {
+            ...d,
+            assignedStudentId: claim ? claim.studentId : null,
+          };
+        })
+      );
+    }
+  }, [ticketingState.claims, systemMode]);
+
+  const handleRefreshTicketing = () => {
+    try {
+      const saved = localStorage.getItem('classroom_ticketing_v1');
+      if (saved) {
+        setTicketingState(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore
+    }
+  };
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
@@ -125,6 +193,11 @@ export default function App() {
     if (window.confirm('자리 배치 및 배정 내역을 초기화하시겠습니까?')) {
       const newDesks = generateDesksFromConfig(config);
       setDesks(newDesks);
+      setTicketingState((prev) => ({
+        ...prev,
+        claims: {},
+        lastUpdated: new Date().toISOString(),
+      }));
     }
   };
 
@@ -177,6 +250,7 @@ export default function App() {
           }
         }}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+        isTicketingOpen={ticketingState.isOpen}
       />
 
       {/* Main Content Area */}
@@ -219,7 +293,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Step 3: Random Assignment & Canvas Viewer */}
+        {/* Step 3: Assignment & Ticketing Mode */}
         {activeTab === 'assignment' && (
           <div className="space-y-6">
             <AssignmentControl
@@ -227,6 +301,12 @@ export default function App() {
               desks={desks}
               setDesks={setDesks}
               onGoToLayout={() => setActiveTab('layout')}
+              systemMode={systemMode}
+              setSystemMode={setSystemMode}
+              ticketingState={ticketingState}
+              setTicketingState={setTicketingState}
+              onRefreshTicketing={handleRefreshTicketing}
+              onOpenStudentView={() => setActiveTab('student_ticketing')}
             />
 
             {/* Interactive Classroom Canvas in Assignment Mode */}
@@ -242,6 +322,20 @@ export default function App() {
               onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
             />
           </div>
+        )}
+
+        {/* Step 4: Dedicated Student Ticketing View */}
+        {activeTab === 'student_ticketing' && (
+          <StudentTicketingView
+            students={students}
+            desks={desks}
+            setDesks={setDesks}
+            config={config}
+            ticketingState={ticketingState}
+            onUpdateTicketingState={setTicketingState}
+            onRefreshData={handleRefreshTicketing}
+            onSwitchToTeacherView={() => setActiveTab('assignment')}
+          />
         )}
       </main>
 
@@ -285,7 +379,7 @@ export default function App() {
 
       {/* Footer with Secret Trigger Icon */}
       <footer className="py-4 px-4 text-center text-xs text-slate-500 border-t border-slate-200 bg-white flex items-center justify-center space-x-2">
-        <span>교실 자리 배정 시스템 · 칠판(앞) / 창문(좌) / 복도(우) 교실 환경 지원</span>
+        <span>교실 자리 배정 및 실시간 티켓팅 시스템 · 칠판(앞) / 창문(좌) / 복도(우) 교실 환경 지원</span>
         <button
           onClick={() => {
             if (isAdminMode) {
