@@ -26,7 +26,14 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const modeParam = params.get('mode') || params.get('tab') || params.get('ticketing');
-      return modeParam === 'student_ticketing' || modeParam === 'ticketing' || modeParam === 'true' || window.location.hash === '#student_ticketing';
+      const hasClassId = Boolean(params.get('classId') || params.get('cid') || params.get('room'));
+      const isTeacherParam = params.get('teacher') === 'true';
+
+      if (isTeacherParam) return false;
+      if (modeParam === 'student_ticketing' || modeParam === 'ticketing' || modeParam === 'true' || window.location.hash === '#student_ticketing') {
+        return true;
+      }
+      return hasClassId;
     } catch {
       return false;
     }
@@ -204,7 +211,6 @@ export default function App() {
       // Ignore
     }
 
-    // Broadcast update across open tabs/windows for this classId
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel(`classroom_ticketing_channel_${classId}`);
@@ -216,7 +222,83 @@ export default function App() {
     }
   }, [ticketingState, classId]);
 
-  // Listen for BroadcastChannel & storage events for real-time synchronization
+  // Server API Synchronization & Real-time SSE / Polling across devices
+  const fetchClassroomData = async () => {
+    try {
+      const res = await fetch(`/api/classrooms/${classId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.students)) setStudents(data.students);
+        if (Array.isArray(data.desks)) setDesks(data.desks);
+        if (data.config) setConfig(data.config);
+        if (data.ticketingState) setTicketingState(data.ticketingState);
+      }
+    } catch {
+      // API call error fallback
+    }
+  };
+
+  const saveClassroomDataToServer = async (overrideState?: any) => {
+    try {
+      await fetch(`/api/classrooms/${classId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          students,
+          desks,
+          config,
+          ticketingState: overrideState || ticketingState,
+        }),
+      });
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Sync with API Server & connect SSE for real-time live updates
+  useEffect(() => {
+    fetchClassroomData();
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/classrooms/${classId}/stream`);
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (Array.isArray(data.students)) setStudents(data.students);
+          if (Array.isArray(data.desks)) setDesks(data.desks);
+          if (data.config) setConfig(data.config);
+          if (data.ticketingState) setTicketingState(data.ticketingState);
+        } catch {
+          // Ignore
+        }
+      };
+    } catch {
+      // Ignore
+    }
+
+    // Polling backup every 1.2 seconds
+    const interval = setInterval(() => {
+      fetchClassroomData();
+    }, 1200);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+    };
+  }, [classId]);
+
+  // Debounced auto-save teacher changes to server
+  useEffect(() => {
+    if (!isStudentOnlyMode) {
+      const timer = setTimeout(() => {
+        saveClassroomDataToServer();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [students, desks, config, ticketingState, classId, isStudentOnlyMode]);
+
+  // Listen for BroadcastChannel & storage events for local tab sync
   useEffect(() => {
     let broadcastChannel: BroadcastChannel | null = null;
     const storageKey = `classroom_ticketing_v1_${classId}`;
@@ -246,30 +328,14 @@ export default function App() {
       }
     };
 
-    // Periodic check every 1 second to ensure non-missed updates across windows
-    const interval = setInterval(() => {
-      try {
-        const saved = localStorage.getItem(storageKey) || localStorage.getItem('classroom_ticketing_v1');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.lastUpdated !== ticketingState.lastUpdated) {
-            setTicketingState(parsed);
-          }
-        }
-      } catch {
-        // Ignore
-      }
-    }, 1000);
-
     window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
       if (broadcastChannel) {
         broadcastChannel.close();
       }
     };
-  }, [classId, ticketingState.lastUpdated]);
+  }, [classId]);
 
   // Sync desks assignedStudentId when ticketing claims update
   useEffect(() => {
@@ -502,6 +568,7 @@ export default function App() {
             onUpdateTicketingState={setTicketingState}
             onRefreshData={handleRefreshTicketing}
             isStudentOnlyMode={isStudentOnlyMode}
+            classId={classId}
             onSwitchToTeacherView={() => {
               if (isStudentOnlyMode) {
                 setIsAdminPasswordModalOpen(true);

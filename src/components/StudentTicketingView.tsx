@@ -35,6 +35,7 @@ interface StudentTicketingViewProps {
   onRefreshData: () => void;
   onSwitchToTeacherView?: () => void;
   isStudentOnlyMode?: boolean;
+  classId?: string;
 }
 
 export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
@@ -47,6 +48,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   onRefreshData,
   onSwitchToTeacherView,
   isStudentOnlyMode,
+  classId,
 }) => {
   // Selected Student ID
   const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
@@ -169,7 +171,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   };
 
   // Execute Seat Claiming (First-time claim)
-  const handleConfirmClaim = () => {
+  const handleConfirmClaim = async () => {
     if (!selectedStudentId || !currentStudent) {
       alert('먼저 본인 이름을 선택해주세요!');
       setConfirmDesk(null);
@@ -184,17 +186,53 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       return;
     }
 
-    // Double check if seat was taken during click
-    if (ticketingState.claims[confirmDesk.id]) {
-      alert('⚠️ 방금 다른 학생이 이 자리를 선택했습니다! 다른 빈 자리를 선택해 주세요.');
-      onRefreshData();
-      setConfirmDesk(null);
-      return;
+    // Attempt claim via Server API for real-time atomic claim
+    if (classId) {
+      try {
+        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: currentStudent.id,
+            studentName: currentStudent.name,
+            deskId: confirmDesk.id,
+            action: 'claim',
+            oldDeskId: currentStudentDeskId || undefined,
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          onUpdateTicketingState(data.ticketingState);
+          if (data.desks) setDesks(data.desks);
+
+          soundManager.playFanfare();
+          try {
+            confetti({
+              particleCount: 90,
+              spread: 80,
+              origin: { y: 0.6 },
+            });
+          } catch {
+            // ignore
+          }
+
+          showToast(`🎉 [${confirmDesk.label}번 자리] 티켓팅 성공!`);
+          setConfirmDesk(null);
+          return;
+        } else {
+          alert(data.error || '⚠️ 방금 다른 학생이 이 자리를 선택했습니다! 다른 빈 자리를 선택해 주세요.');
+          if (data.ticketingState) onUpdateTicketingState(data.ticketingState);
+          setConfirmDesk(null);
+          return;
+        }
+      } catch {
+        // Fallback to local
+      }
     }
 
+    // Fallback local update
     const newClaims = { ...ticketingState.claims };
-
-    // Remove old claim if changing seat
     if (currentStudentDeskId) {
       delete newClaims[currentStudentDeskId];
     }
@@ -205,7 +243,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       second: '2-digit',
     });
 
-    // Add new claim
     newClaims[confirmDesk.id] = {
       studentId: currentStudent.id,
       studentName: currentStudent.name,
@@ -220,15 +257,10 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     onUpdateTicketingState(updatedState);
 
-    // Sync desks assignedStudentId for classroom representation
     setDesks((prev) =>
       prev.map((d) => {
-        if (d.id === confirmDesk.id) {
-          return { ...d, assignedStudentId: currentStudent.id };
-        }
-        if (d.id === currentStudentDeskId) {
-          return { ...d, assignedStudentId: null };
-        }
+        if (d.id === confirmDesk.id) return { ...d, assignedStudentId: currentStudent.id };
+        if (d.id === currentStudentDeskId) return { ...d, assignedStudentId: null };
         return d;
       })
     );
@@ -249,7 +281,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   };
 
   // Execute Seat Swap (Changing from Desk A to Desk B)
-  const handleConfirmSwap = () => {
+  const handleConfirmSwap = async () => {
     if (!selectedStudentId || !currentStudent || !swapConfirmDesk) return;
 
     if (!ticketingState.isOpen) {
@@ -258,16 +290,51 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       return;
     }
 
-    if (ticketingState.claims[swapConfirmDesk.id]) {
-      alert('⚠️ 해당 자리는 이미 다른 학생이 선점했습니다. 다른 빈 자리를 선택해주세요.');
-      onRefreshData();
-      setSwapConfirmDesk(null);
-      return;
+    if (classId) {
+      try {
+        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: currentStudent.id,
+            studentName: currentStudent.name,
+            deskId: swapConfirmDesk.id,
+            action: 'swap',
+            oldDeskId: currentStudentDeskId || undefined,
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          onUpdateTicketingState(data.ticketingState);
+          if (data.desks) setDesks(data.desks);
+
+          soundManager.playFanfare();
+          try {
+            confetti({
+              particleCount: 80,
+              spread: 70,
+              origin: { y: 0.6 },
+            });
+          } catch {
+            // ignore
+          }
+
+          showToast(`🎉 [${swapConfirmDesk.label}번 자리]로 성공적으로 변경되었습니다!`);
+          setSwapConfirmDesk(null);
+          return;
+        } else {
+          alert(data.error || '⚠️ 해당 자리는 이미 다른 학생이 선점했습니다.');
+          if (data.ticketingState) onUpdateTicketingState(data.ticketingState);
+          setSwapConfirmDesk(null);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
     }
 
     const newClaims = { ...ticketingState.claims };
-
-    // Remove old seat claim
     if (currentStudentDeskId) {
       delete newClaims[currentStudentDeskId];
     }
@@ -278,7 +345,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       second: '2-digit',
     });
 
-    // Assign new seat claim
     newClaims[swapConfirmDesk.id] = {
       studentId: currentStudent.id,
       studentName: currentStudent.name,
@@ -295,12 +361,8 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     setDesks((prev) =>
       prev.map((d) => {
-        if (d.id === swapConfirmDesk.id) {
-          return { ...d, assignedStudentId: currentStudent.id };
-        }
-        if (d.id === currentStudentDeskId) {
-          return { ...d, assignedStudentId: null };
-        }
+        if (d.id === swapConfirmDesk.id) return { ...d, assignedStudentId: currentStudent.id };
+        if (d.id === currentStudentDeskId) return { ...d, assignedStudentId: null };
         return d;
       })
     );
@@ -321,10 +383,38 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   };
 
   // Execute Claim Cancellation
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!currentStudentDeskId || !currentStudent) {
       setIsCancelModalOpen(false);
       return;
+    }
+
+    if (classId) {
+      try {
+        const res = await fetch(`/api/classrooms/${classId}/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: currentStudent.id,
+            studentName: currentStudent.name,
+            deskId: currentStudentDeskId,
+            action: 'cancel',
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          onUpdateTicketingState(data.ticketingState);
+          if (data.desks) setDesks(data.desks);
+
+          soundManager.playPop();
+          showToast('자리 응모가 성공적으로 취소되었습니다.');
+          setIsCancelModalOpen(false);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
     }
 
     const newClaims = { ...ticketingState.claims };
