@@ -17,6 +17,8 @@ interface AssignmentControlProps {
   setTicketingState: React.Dispatch<React.SetStateAction<TicketingState>>;
   onRefreshTicketing: () => void | Promise<void>;
   onOpenStudentView: () => void;
+  classId?: string;
+  onGenerateRandomLink?: () => string;
 }
 
 export const AssignmentControl: React.FC<AssignmentControlProps> = ({
@@ -30,6 +32,8 @@ export const AssignmentControl: React.FC<AssignmentControlProps> = ({
   setTicketingState,
   onRefreshTicketing,
   onOpenStudentView,
+  classId,
+  onGenerateRandomLink,
 }) => {
   const [mode, setMode] = useState<AssignmentMode>('random');
   const [speed, setSpeed] = useState<ShuffleAnimationSpeed>('dramatic');
@@ -232,6 +236,8 @@ export const AssignmentControl: React.FC<AssignmentControlProps> = ({
           setTicketingState={setTicketingState}
           onRefreshTicketing={onRefreshTicketing}
           onOpenStudentView={onOpenStudentView}
+          classId={classId}
+          onGenerateRandomLink={onGenerateRandomLink}
         />
       ) : (
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">

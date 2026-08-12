@@ -240,32 +240,65 @@ export default function App() {
   const applyServerData = (data: any) => {
     if (!data) return;
 
-    // Normalize payload to compare with current known server state
+    isIncomingServerUpdateRef.current = true;
+
+    if (Array.isArray(data.students) && data.students.length > 0) {
+      setStudents(data.students);
+    }
+    if (Array.isArray(data.desks) && data.desks.length > 0) {
+      setDesks(data.desks);
+    }
+    if (data.config) {
+      setConfig(data.config);
+    }
+    if (data.ticketingState) {
+      setTicketingState((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(data.ticketingState)) {
+          return prev;
+        }
+        return data.ticketingState;
+      });
+    }
+
     const payloadToCompare = {
       students: data.students ?? [],
       desks: data.desks ?? [],
       config: data.config ?? null,
       ticketingState: data.ticketingState ?? { isOpen: true, claims: {} },
     };
-    const dataStr = JSON.stringify(payloadToCompare);
-
-    if (dataStr !== lastKnownDataRef.current) {
-      lastKnownDataRef.current = dataStr;
-      isIncomingServerUpdateRef.current = true;
-
-      if (Array.isArray(data.students)) setStudents(data.students);
-      if (Array.isArray(data.desks)) setDesks(data.desks);
-      if (data.config) setConfig(data.config);
-      if (data.ticketingState) {
-        setTicketingState((prev) => {
-          if (JSON.stringify(prev) === JSON.stringify(data.ticketingState)) {
-            return prev;
-          }
-          return data.ticketingState;
-        });
-      }
-    }
+    lastKnownDataRef.current = JSON.stringify(payloadToCompare);
   };
+
+  // Keep URL query parameter synced with classId
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('classId') !== classId) {
+        url.searchParams.set('classId', classId);
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch {
+      // Ignore
+    }
+  }, [classId]);
+
+  // Auto-sync desks assignedStudentId with ticketing claims
+  useEffect(() => {
+    if (ticketingState?.claims) {
+      setDesks((prevDesks) => {
+        let changed = false;
+        const newDesks = prevDesks.map((desk) => {
+          const claim = ticketingState.claims[desk.id];
+          if (claim && desk.assignedStudentId !== claim.studentId) {
+            changed = true;
+            return { ...desk, assignedStudentId: claim.studentId };
+          }
+          return desk;
+        });
+        return changed ? newDesks : prevDesks;
+      });
+    }
+  }, [ticketingState.claims]);
 
   // Server API Synchronization
   const fetchClassroomData = async () => {
@@ -428,16 +461,7 @@ export default function App() {
       const res = await fetch(getApiUrl(`/api/classrooms/${classId}`));
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.students)) setStudents(data.students);
-        if (Array.isArray(data.desks)) setDesks(data.desks);
-        if (data.config) setConfig(data.config);
-        if (data.ticketingState) {
-          const freshState: TicketingState = {
-            ...data.ticketingState,
-            lastUpdated: new Date().toISOString(),
-          };
-          setTicketingState(freshState);
-        }
+        applyServerData(data);
       }
     } catch {
       try {
@@ -445,9 +469,9 @@ export default function App() {
         const saved = localStorage.getItem(storageKey) || localStorage.getItem('classroom_ticketing_v1');
         if (saved) {
           const parsed = JSON.parse(saved);
-          setTicketingState({
-            ...parsed,
-            lastUpdated: new Date().toISOString(),
+          setTicketingState((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(parsed)) return prev;
+            return parsed;
           });
         }
       } catch {
@@ -622,6 +646,7 @@ export default function App() {
               canvasRef={canvasRef}
               isAdminMode={isAdminMode}
               onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              ticketingState={ticketingState}
             />
           </div>
         )}

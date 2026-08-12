@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Desk, Student, ClassroomConfig } from '../types';
+import { Desk, Student, ClassroomConfig, TicketingState } from '../types';
 import { DESK_WIDTH, DESK_HEIGHT } from '../utils/classroom';
-import { Lock, Unlock, Trash2, GripVertical, User, ArrowLeftRight, Monitor, Eye, ShieldCheck } from 'lucide-react';
+import { Lock, Unlock, Trash2, GripVertical, User, ArrowLeftRight, Monitor, Eye, ShieldCheck, Ticket } from 'lucide-react';
 
 interface ClassroomCanvasProps {
   desks: Desk[];
@@ -13,6 +13,7 @@ interface ClassroomCanvasProps {
   canvasRef?: React.RefObject<HTMLDivElement | null>;
   isAdminMode?: boolean;
   onOpenAdminPanel?: () => void;
+  ticketingState?: TicketingState;
 }
 
 export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
@@ -25,6 +26,7 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
   canvasRef: externalCanvasRef,
   isAdminMode,
   onOpenAdminPanel,
+  ticketingState,
 }) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const canvasRef = externalCanvasRef || localCanvasRef;
@@ -216,7 +218,12 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
         {/* ================= Classroom Desks Canvas Area ================= */}
         <div className="relative my-4 ml-8 mr-8" style={{ minHeight: `${maxDeskY + 40}px` }}>
           {desks.map((desk) => {
-            const assignedStudent = desk.assignedStudentId ? studentMap.get(desk.assignedStudentId) : null;
+            const claim = ticketingState?.claims ? ticketingState.claims[desk.id] : null;
+            const assignedStudent = desk.assignedStudentId 
+              ? studentMap.get(desk.assignedStudentId) 
+              : claim 
+              ? ({ id: claim.studentId, name: claim.studentName, gender: 'male', isAbsent: false, frontRowOnly: false } as Student)
+              : null;
             const fixedStudentAdmin = isAdminMode ? students.find((s) => s.fixedDeskId === desk.id || s.fixedDeskId === desk.label) : null;
             const isSelectedForSwap = selectedDeskForSwap === desk.id;
             const isHoveredTarget = dragOverDeskId === desk.id;
@@ -241,6 +248,8 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
                     ? 'ring-4 ring-emerald-400 bg-emerald-50 border-emerald-500 z-20'
                     : desk.isLocked
                     ? 'bg-slate-100 border-slate-400'
+                    : claim
+                    ? 'bg-gradient-to-b from-emerald-50 to-emerald-100/90 border-emerald-500 ring-2 ring-emerald-300/50 shadow-md'
                     : assignedStudent
                     ? assignedStudent.gender === 'male'
                       ? 'bg-gradient-to-b from-blue-50/90 to-blue-100/90 border-blue-400 hover:border-blue-500'
@@ -303,6 +312,11 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
                       </div>
 
                       <div className="flex items-center justify-center space-x-1 mt-0.5 text-[10px]">
+                        {claim && (
+                          <span className="bg-emerald-600 text-white font-extrabold text-[9px] px-1 py-0.2 rounded">
+                            🎟️ 응모
+                          </span>
+                        )}
                         {assignedStudent.gender === 'male' && <span className="text-blue-600 font-medium">남</span>}
                         {assignedStudent.gender === 'female' && <span className="text-rose-600 font-medium">여</span>}
                         {assignedStudent.frontRowOnly && <span className="text-amber-600 font-bold">★앞</span>}

@@ -117,17 +117,43 @@ async function startServer() {
 
     const current = classrooms.get(classId) || {
       classId,
+      students: [],
+      desks: [],
+      config: null,
       ticketingState: { isOpen: true, claims: {}, lastUpdated: new Date().toISOString() },
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Merge claims so student votes on server are preserved during teacher auto-saves
+    const currentClaims = current.ticketingState?.claims || {};
+    const incomingClaims = ticketingState?.claims || {};
+    const mergedClaims = { ...currentClaims, ...incomingClaims };
+
+    // Sync desks assignedStudentId with merged claims
+    let updatedDesks = (desks && desks.length > 0) ? [...desks] : (current.desks ? [...current.desks] : []);
+    if (updatedDesks.length > 0) {
+      updatedDesks = updatedDesks.map((d: any) => {
+        const claim = mergedClaims[d.id];
+        return {
+          ...d,
+          assignedStudentId: claim ? claim.studentId : (d.assignedStudentId ?? null),
+        };
+      });
+    }
+
+    const mergedTicketingState: TicketingState = {
+      isOpen: ticketingState?.isOpen ?? current.ticketingState?.isOpen ?? true,
+      claims: mergedClaims,
       lastUpdated: new Date().toISOString(),
     };
 
     const updated: ClassroomData = {
       ...current,
       classId,
-      students: students ?? current.students,
-      desks: desks ?? current.desks,
+      students: (students && students.length > 0) ? students : (current.students ?? []),
+      desks: updatedDesks,
       config: config ?? current.config,
-      ticketingState: ticketingState ?? current.ticketingState,
+      ticketingState: mergedTicketingState,
       lastUpdated: new Date().toISOString(),
     };
 
