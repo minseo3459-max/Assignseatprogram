@@ -222,16 +222,41 @@ export default function App() {
     }
   }, [ticketingState, classId]);
 
-  // Server API Synchronization & Real-time SSE / Polling across devices
+  // Ref tracking last received/saved data payload string and flag for server updates
+  const lastKnownDataRef = useRef<string>('');
+  const isIncomingServerUpdateRef = useRef<boolean>(false);
+
+  // Helper to safely apply server data snapshot
+  const applyServerData = (data: any) => {
+    if (!data) return;
+
+    // Normalize payload to compare with current known server state
+    const payloadToCompare = {
+      students: data.students ?? [],
+      desks: data.desks ?? [],
+      config: data.config ?? null,
+      ticketingState: data.ticketingState ?? { isOpen: true, claims: {} },
+    };
+    const dataStr = JSON.stringify(payloadToCompare);
+
+    if (dataStr !== lastKnownDataRef.current) {
+      lastKnownDataRef.current = dataStr;
+      isIncomingServerUpdateRef.current = true;
+
+      if (Array.isArray(data.students)) setStudents(data.students);
+      if (Array.isArray(data.desks)) setDesks(data.desks);
+      if (data.config) setConfig(data.config);
+      if (data.ticketingState) setTicketingState(data.ticketingState);
+    }
+  };
+
+  // Server API Synchronization
   const fetchClassroomData = async () => {
     try {
       const res = await fetch(`/api/classrooms/${classId}`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.students)) setStudents(data.students);
-        if (Array.isArray(data.desks)) setDesks(data.desks);
-        if (data.config) setConfig(data.config);
-        if (data.ticketingState) setTicketingState(data.ticketingState);
+        applyServerData(data);
       }
     } catch {
       // API call error fallback
@@ -240,15 +265,22 @@ export default function App() {
 
   const saveClassroomDataToServer = async (overrideState?: any) => {
     try {
+      const payload = {
+        students,
+        desks,
+        config,
+        ticketingState: overrideState || ticketingState,
+      };
+      const dataStr = JSON.stringify(payload);
+      if (dataStr === lastKnownDataRef.current) {
+        return; // Data has not changed, suppress redundant save
+      }
+      lastKnownDataRef.current = dataStr;
+
       await fetch(`/api/classrooms/${classId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          students,
-          desks,
-          config,
-          ticketingState: overrideState || ticketingState,
-        }),
+        body: dataStr,
       });
     } catch {
       // Ignore
@@ -265,10 +297,7 @@ export default function App() {
       eventSource.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
-          if (Array.isArray(data.students)) setStudents(data.students);
-          if (Array.isArray(data.desks)) setDesks(data.desks);
-          if (data.config) setConfig(data.config);
-          if (data.ticketingState) setTicketingState(data.ticketingState);
+          applyServerData(data);
         } catch {
           // Ignore
         }
@@ -277,10 +306,10 @@ export default function App() {
       // Ignore
     }
 
-    // Polling backup every 1.2 seconds
+    // Backup polling every 3 seconds
     const interval = setInterval(() => {
       fetchClassroomData();
-    }, 1200);
+    }, 3000);
 
     return () => {
       if (eventSource) eventSource.close();
@@ -288,12 +317,18 @@ export default function App() {
     };
   }, [classId]);
 
-  // Debounced auto-save teacher changes to server
+  // Debounced auto-save teacher changes to server (guarded against incoming updates)
   useEffect(() => {
+    if (isIncomingServerUpdateRef.current) {
+      // State change originated from server broadcast - skip auto-save to break feedback loop
+      isIncomingServerUpdateRef.current = false;
+      return;
+    }
+
     if (!isStudentOnlyMode) {
       const timer = setTimeout(() => {
         saveClassroomDataToServer();
-      }, 300);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [students, desks, config, ticketingState, classId, isStudentOnlyMode]);
@@ -336,21 +371,6 @@ export default function App() {
       }
     };
   }, [classId]);
-
-  // Sync desks assignedStudentId when ticketing claims update
-  useEffect(() => {
-    if (systemMode === 'ticketing') {
-      setDesks((prevDesks) =>
-        prevDesks.map((d) => {
-          const claim = ticketingState.claims[d.id];
-          return {
-            ...d,
-            assignedStudentId: claim ? claim.studentId : null,
-          };
-        })
-      );
-    }
-  }, [ticketingState.claims, systemMode]);
 
   const handleTabChange = (tab: 'students' | 'layout' | 'assignment' | 'student_ticketing') => {
     if (isStudentOnlyMode && tab !== 'student_ticketing') {

@@ -82,9 +82,18 @@ async function startServer() {
   // 1. Get classroom state by classId
   app.get('/api/classrooms/:classId', (req, res) => {
     const { classId } = req.params;
-    const existing = classrooms.get(classId);
+    let existing = classrooms.get(classId);
     if (!existing) {
-      return res.status(404).json({ error: 'Classroom not found' });
+      existing = {
+        classId,
+        students: [],
+        desks: [],
+        config: null,
+        ticketingState: { isOpen: true, claims: {}, lastUpdated: new Date().toISOString() },
+        lastUpdated: new Date().toISOString(),
+      };
+      classrooms.set(classId, existing);
+      saveToDisk();
     }
     return res.json(existing);
   });
@@ -122,9 +131,17 @@ async function startServer() {
     const { classId } = req.params;
     const { studentId, studentName, deskId, action, oldDeskId } = req.body;
 
-    const classroom = classrooms.get(classId);
+    let classroom = classrooms.get(classId);
     if (!classroom) {
-      return res.status(404).json({ success: false, error: '학급을 찾을 수 없습니다.' });
+      classroom = {
+        classId,
+        students: [],
+        desks: [],
+        config: null,
+        ticketingState: { isOpen: true, claims: {}, lastUpdated: new Date().toISOString() },
+        lastUpdated: new Date().toISOString(),
+      };
+      classrooms.set(classId, classroom);
     }
 
     if (!classroom.ticketingState.isOpen) {
@@ -249,8 +266,9 @@ async function startServer() {
   app.get('/api/classrooms/:classId/stream', (req, res) => {
     const { classId } = req.params;
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
 
     if (!sseClients.has(classId)) {
       sseClients.set(classId, new Set());
@@ -258,12 +276,32 @@ async function startServer() {
     sseClients.get(classId)!.add(res);
 
     // Send initial snapshot
-    const current = classrooms.get(classId);
-    if (current) {
-      res.write(`data: ${JSON.stringify(current)}\n\n`);
+    let current = classrooms.get(classId);
+    if (!current) {
+      current = {
+        classId,
+        students: [],
+        desks: [],
+        config: null,
+        ticketingState: { isOpen: true, claims: {}, lastUpdated: new Date().toISOString() },
+        lastUpdated: new Date().toISOString(),
+      };
+      classrooms.set(classId, current);
+      saveToDisk();
     }
+    res.write(`data: ${JSON.stringify(current)}\n\n`);
+
+    // Keep-alive ping every 15 seconds
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(': keep-alive\n\n');
+      } catch {
+        // Disconnected
+      }
+    }, 15000);
 
     req.on('close', () => {
+      clearInterval(pingInterval);
       const set = sseClients.get(classId);
       if (set) {
         set.delete(res);

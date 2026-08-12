@@ -120,17 +120,32 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
   };
 
   // Reset Ticketing Claims
-  const handleResetClaims = () => {
+  const handleResetClaims = async () => {
     if (window.confirm('모든 학생의 티켓팅 응모 내역을 초기화하시겠습니까?')) {
-      const resetState: TicketingState = {
-        isOpen: ticketingState.isOpen,
-        claims: {},
-        lastUpdated: new Date().toISOString(),
-      };
-      setTicketingState(resetState);
-
-      // Reset assignedStudentId on desks
-      setDesks((prev) => prev.map((d) => ({ ...d, assignedStudentId: null })));
+      if (classId) {
+        try {
+          const res = await fetch(`/api/classrooms/${classId}/reset-claims`, {
+            method: 'POST',
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.classroom) {
+              setTicketingState(data.classroom.ticketingState);
+              if (data.classroom.desks) setDesks(data.classroom.desks);
+            }
+          }
+        } catch {
+          // Fallback
+        }
+      } else {
+        const resetState: TicketingState = {
+          isOpen: ticketingState.isOpen,
+          claims: {},
+          lastUpdated: new Date().toISOString(),
+        };
+        setTicketingState(resetState);
+        setDesks((prev) => prev.map((d) => ({ ...d, assignedStudentId: null })));
+      }
 
       soundManager.playPop();
       showToast('티켓팅 응모 현황이 초기화되었습니다.');
@@ -138,20 +153,43 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
   };
 
   // Cancel individual claim by teacher
-  const handleCancelSingleClaim = (deskId: string, studentName: string) => {
+  const handleCancelSingleClaim = async (deskId: string, studentName: string) => {
     if (window.confirm(`${studentName} 학생의 자리 응모를 취소하시겠습니까?`)) {
-      const newClaims = { ...ticketingState.claims };
-      delete newClaims[deskId];
+      const claim = ticketingState.claims[deskId];
+      if (classId && claim) {
+        try {
+          const res = await fetch(`/api/classrooms/${classId}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              studentId: claim.studentId,
+              studentName: claim.studentName,
+              deskId: deskId,
+              action: 'cancel',
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ticketingState) setTicketingState(data.ticketingState);
+            if (data.desks) setDesks(data.desks);
+          }
+        } catch {
+          // Fallback
+        }
+      } else {
+        const newClaims = { ...ticketingState.claims };
+        delete newClaims[deskId];
 
-      setTicketingState((prev) => ({
-        ...prev,
-        claims: newClaims,
-        lastUpdated: new Date().toISOString(),
-      }));
+        setTicketingState((prev) => ({
+          ...prev,
+          claims: newClaims,
+          lastUpdated: new Date().toISOString(),
+        }));
 
-      setDesks((prev) =>
-        prev.map((d) => (d.id === deskId ? { ...d, assignedStudentId: null } : d))
-      );
+        setDesks((prev) =>
+          prev.map((d) => (d.id === deskId ? { ...d, assignedStudentId: null } : d))
+        );
+      }
 
       soundManager.playPop();
       showToast(`${studentName} 학생의 응모가 취소되었습니다.`);
