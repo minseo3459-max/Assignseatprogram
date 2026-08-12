@@ -15,7 +15,7 @@ interface AssignmentControlProps {
   setSystemMode: (mode: SystemMode) => void;
   ticketingState: TicketingState;
   setTicketingState: React.Dispatch<React.SetStateAction<TicketingState>>;
-  onRefreshTicketing: () => void;
+  onRefreshTicketing: () => void | Promise<void>;
   onOpenStudentView: () => void;
 }
 

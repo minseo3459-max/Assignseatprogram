@@ -376,14 +376,36 @@ export default function App() {
     }
   };
 
-  const handleRefreshTicketing = () => {
+  const handleRefreshTicketing = async () => {
     try {
-      const saved = localStorage.getItem('classroom_ticketing_v1');
-      if (saved) {
-        setTicketingState(JSON.parse(saved));
+      const res = await fetch(`/api/classrooms/${classId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.students)) setStudents(data.students);
+        if (Array.isArray(data.desks)) setDesks(data.desks);
+        if (data.config) setConfig(data.config);
+        if (data.ticketingState) {
+          const freshState: TicketingState = {
+            ...data.ticketingState,
+            lastUpdated: new Date().toISOString(),
+          };
+          setTicketingState(freshState);
+        }
       }
     } catch {
-      // Ignore
+      try {
+        const storageKey = `classroom_ticketing_v1_${classId}`;
+        const saved = localStorage.getItem(storageKey) || localStorage.getItem('classroom_ticketing_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTicketingState({
+            ...parsed,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // Ignore
+      }
     }
   };
 

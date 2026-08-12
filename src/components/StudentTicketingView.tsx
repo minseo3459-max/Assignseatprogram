@@ -32,11 +32,16 @@ interface StudentTicketingViewProps {
   config: ClassroomConfig;
   ticketingState: TicketingState;
   onUpdateTicketingState: (newState: TicketingState) => void;
-  onRefreshData: () => void;
+  onRefreshData: () => void | Promise<void>;
   onSwitchToTeacherView?: () => void;
   isStudentOnlyMode?: boolean;
   classId?: string;
 }
+
+const formatDeskLabel = (label?: string) => {
+  if (!label) return '자리';
+  return label.endsWith('번') ? label : `${label}번`;
+};
 
 export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   students,
@@ -160,10 +165,10 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   };
 
   // Handle Refresh Button
-  const handleRefreshClick = () => {
+  const handleRefreshClick = async () => {
     setIsRefreshing(true);
     soundManager.playPop();
-    onRefreshData();
+    await onRefreshData();
     showToast('🔄 실시간 응모 현황을 불러왔습니다!');
     setTimeout(() => {
       setIsRefreshing(false);
@@ -217,7 +222,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
             // ignore
           }
 
-          showToast(`🎉 [${confirmDesk.label}번 자리] 티켓팅 성공!`);
+          showToast(`🎉 [${formatDeskLabel(confirmDesk.label)}] 티켓팅 성공!`);
           setConfirmDesk(null);
           return;
         } else {
@@ -276,7 +281,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       // ignore
     }
 
-    showToast(`🎉 [${confirmDesk.label}번 자리] 티켓팅 성공!`);
+    showToast(`🎉 [${formatDeskLabel(confirmDesk.label)}] 티켓팅 성공!`);
     setConfirmDesk(null);
   };
 
@@ -320,7 +325,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
             // ignore
           }
 
-          showToast(`🎉 [${swapConfirmDesk.label}번 자리]로 성공적으로 변경되었습니다!`);
+          showToast(`🎉 [${formatDeskLabel(swapConfirmDesk.label)}]로 성공적으로 변경되었습니다!`);
           setSwapConfirmDesk(null);
           return;
         } else {
@@ -378,7 +383,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       // ignore
     }
 
-    showToast(`🎉 [${swapConfirmDesk.label}번 자리]로 성공적으로 변경되었습니다!`);
+    showToast(`🎉 [${formatDeskLabel(swapConfirmDesk.label)}]로 성공적으로 변경되었습니다!`);
     setSwapConfirmDesk(null);
   };
 
@@ -598,7 +603,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                 {currentStudentDesk ? (
                   <div className="text-sm font-bold text-emerald-600 flex items-center space-x-1 mt-0.5">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>현재 [{currentStudentDesk.label}번 자리]에 티켓팅 응모 완료!</span>
+                    <span>현재 [{formatDeskLabel(currentStudentDesk.label)}]에 티켓팅 응모 완료!</span>
                   </div>
                 ) : (
                   <div className="text-sm font-medium text-amber-600 flex items-center space-x-1 mt-0.5">
@@ -780,7 +785,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                     {/* Desk Label */}
                     <div className="flex items-center justify-between text-[11px] font-bold pb-1 border-b border-slate-200/60">
                       <span className="bg-slate-200/80 text-slate-800 px-2 py-0.5 rounded font-mono">
-                        {desk.label}번
+                        {formatDeskLabel(desk.label)}
                       </span>
                       {desk.sectionId && (
                         <span className="text-[10px] text-indigo-600 font-bold">
@@ -870,7 +875,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                      {desk?.label}번 자리
+                      {formatDeskLabel(desk?.label)}
                     </span>
                     <span className="text-[10px] text-slate-400">{claim.claimedAt}</span>
                   </div>
@@ -968,7 +973,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               <div className="flex justify-between items-center text-sm border-t border-slate-200/80 pt-2">
                 <span className="text-slate-500 font-medium">선택 자리:</span>
                 <span className="font-black text-indigo-600 text-lg bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
-                  {confirmDesk.label}번 자리 ({confirmDesk.sectionId || 1}분단)
+                  {formatDeskLabel(confirmDesk.label)} ({confirmDesk.sectionId || 1}분단)
                 </span>
               </div>
             </div>
@@ -1011,14 +1016,14 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500 font-medium">기존 자리:</span>
                 <span className="font-extrabold text-slate-500 line-through">
-                  {currentStudentDesk.label}번 자리
+                  {formatDeskLabel(currentStudentDesk.label)}
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-sm border-t border-slate-200/80 pt-2">
                 <span className="text-slate-500 font-medium">변경할 자리:</span>
                 <span className="font-black text-emerald-600 text-lg bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
-                  {swapConfirmDesk.label}번 자리 ({swapConfirmDesk.sectionId || 1}분단)
+                  {formatDeskLabel(swapConfirmDesk.label)} ({swapConfirmDesk.sectionId || 1}분단)
                 </span>
               </div>
             </div>

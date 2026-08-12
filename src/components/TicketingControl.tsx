@@ -30,7 +30,7 @@ interface TicketingControlProps {
   setDesks: React.Dispatch<React.SetStateAction<Desk[]>>;
   ticketingState: TicketingState;
   setTicketingState: React.Dispatch<React.SetStateAction<TicketingState>>;
-  onRefreshTicketing: () => void;
+  onRefreshTicketing: () => void | Promise<void>;
   onOpenStudentView: () => void;
   classId?: string;
   onGenerateRandomLink?: () => string;
@@ -109,10 +109,10 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
   };
 
   // Manual Refresh Button Action (enabled strictly for ticketing)
-  const handleManualRefresh = () => {
+  const handleManualRefresh = async () => {
     setIsRefreshing(true);
     soundManager.playPop();
-    onRefreshTicketing();
+    await onRefreshTicketing();
     showToast('🔄 최신 학생 응모 현황을 불러왔습니다!');
     setTimeout(() => {
       setIsRefreshing(false);
@@ -389,7 +389,7 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
 
                   <div className="flex items-center space-x-2">
                     <span className="font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                      {desk?.label || '자리'}번 ({desk?.sectionId || 1}분단)
+                      {desk?.label ? (desk.label.endsWith('번') ? desk.label : `${desk.label}번`) : '자리'} ({desk?.sectionId || 1}분단)
                     </span>
 
                     <button
