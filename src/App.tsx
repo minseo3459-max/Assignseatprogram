@@ -201,12 +201,21 @@ export default function App() {
     }
   }, [presets]);
 
+  // Ref tracking last broadcasted ticketing state to avoid self-referential loops
+  const lastBroadcastStrRef = useRef<string>('');
+
   // Sync ticketing state to LocalStorage and BroadcastChannel per classId
   useEffect(() => {
+    const stateStr = JSON.stringify(ticketingState);
+    if (stateStr === lastBroadcastStrRef.current) {
+      return;
+    }
+    lastBroadcastStrRef.current = stateStr;
+
     const storageKey = `classroom_ticketing_v1_${classId}`;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(ticketingState));
-      localStorage.setItem('classroom_ticketing_v1', JSON.stringify(ticketingState));
+      localStorage.setItem(storageKey, stateStr);
+      localStorage.setItem('classroom_ticketing_v1', stateStr);
     } catch {
       // Ignore
     }
@@ -246,7 +255,14 @@ export default function App() {
       if (Array.isArray(data.students)) setStudents(data.students);
       if (Array.isArray(data.desks)) setDesks(data.desks);
       if (data.config) setConfig(data.config);
-      if (data.ticketingState) setTicketingState(data.ticketingState);
+      if (data.ticketingState) {
+        setTicketingState((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(data.ticketingState)) {
+            return prev;
+          }
+          return data.ticketingState;
+        });
+      }
     }
   };
 
@@ -344,7 +360,12 @@ export default function App() {
         broadcastChannel = new BroadcastChannel(channelName);
         broadcastChannel.onmessage = (event) => {
           if (event.data && event.data.type === 'TICKETING_UPDATE' && event.data.payload) {
-            setTicketingState(event.data.payload);
+            setTicketingState((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(event.data.payload)) {
+                return prev;
+              }
+              return event.data.payload;
+            });
           }
         };
       }
@@ -356,7 +377,12 @@ export default function App() {
       if ((e.key === storageKey || e.key === 'classroom_ticketing_v1') && e.newValue) {
         try {
           const newState: TicketingState = JSON.parse(e.newValue);
-          setTicketingState(newState);
+          setTicketingState((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(newState)) {
+              return prev;
+            }
+            return newState;
+          });
         } catch {
           // Ignore
         }
