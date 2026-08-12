@@ -64,6 +64,10 @@ export default function App() {
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    document.title = '자리 배정 시스템';
+  }, []);
+
   // Sync state to LocalStorage
   useEffect(() => {
     try {
