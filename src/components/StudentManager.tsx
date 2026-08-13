@@ -36,6 +36,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [pinCopyToast, setPinCopyToast] = useState(false);
 
+  const [pasteMode, setPasteMode] = useState<'append' | 'replace'>('append');
+
   // Handle PIN button click with password check
   const handleOpenPinManager = () => {
     if (isAdminMode) {
@@ -73,6 +75,21 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     );
   };
 
+  // Generate random 4-digit PINs
+  const handleRandomPins = () => {
+    const used = new Set<string>();
+    setStudents((prev) =>
+      prev.map((s) => {
+        let randomPin = '';
+        do {
+          randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+        } while (used.has(randomPin));
+        used.add(randomPin);
+        return { ...s, pin: randomPin };
+      })
+    );
+  };
+
   // Copy PIN table to clipboard
   const handleCopyPinList = () => {
     const listText = students
@@ -93,9 +110,15 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     if (!inputText.trim()) return;
     const newParsed = parseStudentsFromText(inputText);
     if (newParsed.length > 0) {
-      setStudents((prev) => [...prev, ...newParsed]);
+      if (pasteMode === 'replace') {
+        setStudents(newParsed);
+      } else {
+        setStudents((prev) => [...prev, ...newParsed]);
+      }
       setInputText('');
       setShowBatchModal(false);
+    } else {
+      alert('입력된 텍스트에서 인식할 수 있는 학생 이름이 없습니다. 형식(예: 김철수, 이영희)을 확인해주세요.');
     }
   };
 
@@ -413,18 +436,54 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       {showBatchModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">학생 명단 일괄 붙여넣기</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              엑셀이나 텍스트 파일에서 복사한 학생 이름을 붙여넣으세요. 이름 뒤에 (남), (여)를 적으면 성별이 자동 인식됩니다. (예: 김철수(남), 이영희(여))
+            <h3 className="text-lg font-bold text-slate-900 mb-1">학생 명단 일괄 붙여넣기</h3>
+            <p className="text-xs text-slate-500 mb-3">
+              엑셀, 한글, 워드 또는 텍스트 파일에서 복사한 학생 명단을 붙여넣으세요.
+              <br />
+              <span className="text-indigo-600 font-medium">Tip: 엑셀 복사/줄바꿈/쉼표/번호(1. 홍길동)/성별(김철수(남)) 모두 자동 인식됩니다.</span>
             </p>
 
+            {/* Mode Selector */}
+            <div className="mb-3 p-1.5 bg-slate-100 rounded-xl flex items-center space-x-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setPasteMode('append')}
+                className={`flex-1 py-1.5 rounded-lg transition text-center ${
+                  pasteMode === 'append' ? 'bg-white text-indigo-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                + 기존 명단에 추가하기
+              </button>
+              <button
+                type="button"
+                onClick={() => setPasteMode('replace')}
+                className={`flex-1 py-1.5 rounded-lg transition text-center ${
+                  pasteMode === 'replace' ? 'bg-rose-500 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🔄 새 명단으로 전체 교체하기
+              </button>
+            </div>
+
             <textarea
-              rows={8}
+              rows={7}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={`김민준(남)\n이서연(여)\n박도윤\n최지우(여)\n정시우`}
+              placeholder={`예시 1 (줄바꿈):\n김민준(남)\n이서연(여)\n박도윤\n\n예시 2 (엑셀 복사):\n1\t강민준\t남\n2\t김서연\t여`}
               className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
             />
+
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                인식된 학생:{' '}
+                <strong className="text-indigo-600 font-bold">
+                  {inputText.trim() ? parseStudentsFromText(inputText).length : 0}명
+                </strong>
+              </span>
+              {pasteMode === 'replace' && students.length > 0 && (
+                <span className="text-rose-600 font-medium">* 기존 {students.length}명 명단이 교체됩니다.</span>
+              )}
+            </div>
 
             <div className="mt-4 flex items-center justify-end space-x-3">
               <button
@@ -436,9 +495,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
               <button
                 onClick={handleBatchAdd}
-                className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md"
+                className={`px-5 py-2 text-sm font-bold text-white rounded-xl shadow-md transition ${
+                  pasteMode === 'replace' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
               >
-                명단 추가하기
+                {pasteMode === 'replace' ? '새 명단으로 교체하기' : '명단 추가하기'}
               </button>
             </div>
           </div>
@@ -448,7 +509,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       {/* PIN Management Modal */}
       {showPinModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl font-bold">
@@ -468,26 +529,37 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 onClick={handleResetPins1234}
-                className="p-3 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition"
+                className="p-2.5 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition cursor-pointer"
               >
-                <div className="text-indigo-600 font-extrabold mb-0.5">전체 1234로 초기화</div>
-                <div className="text-[10px] text-slate-500 font-normal">모든 학생 PIN: 1234</div>
+                <div className="text-indigo-600 font-extrabold mb-0.5">전체 1234 초기화</div>
+                <div className="text-[10px] text-slate-500 font-normal">PIN: 1234 동일</div>
               </button>
 
               <button
                 onClick={handleAutoSeqPins}
-                className="p-3 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition"
+                className="p-2.5 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center transition cursor-pointer"
               >
-                <div className="text-indigo-600 font-extrabold mb-0.5">연번 생성 (1001~)</div>
+                <div className="text-indigo-600 font-extrabold mb-0.5">연번 부여 (1001~)</div>
                 <div className="text-[10px] text-slate-500 font-normal">1001, 1002, 1003...</div>
               </button>
 
               <button
+                onClick={handleRandomPins}
+                className="p-2.5 bg-amber-50 hover:bg-amber-100 hover:border-amber-400 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 text-center transition cursor-pointer"
+              >
+                <div className="text-amber-700 font-extrabold mb-0.5 flex items-center justify-center space-x-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>임의(랜덤) PIN</span>
+                </div>
+                <div className="text-[10px] text-amber-700 font-normal">랜덤 4자리 번호</div>
+              </button>
+
+              <button
                 onClick={handleCopyPinList}
-                className="p-3 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl text-xs font-bold text-center transition shadow-sm flex flex-col items-center justify-center"
+                className="p-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl text-xs font-bold text-center transition shadow-sm flex flex-col items-center justify-center cursor-pointer"
               >
                 <div className="flex items-center space-x-1 font-black">
                   <Copy className="w-3.5 h-3.5" />

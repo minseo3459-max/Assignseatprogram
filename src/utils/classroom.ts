@@ -275,34 +275,126 @@ export function generateShuffleTickAssignment(
 }
 
 /**
- * Parse bulk text input into Student list
+ * Helper to clean leading row numbers or bullets from name
+ */
+function cleanStudentName(name: string): string {
+  let cleaned = name.trim();
+  // Remove leading row number formats: "1.", "01.", "1)", "(1)", "[1]", "1번", "1 -", "1_"
+  cleaned = cleaned.replace(/^[\(\[\{]?\d+[\)\]\}]?[\.\_\-\s]*|^\d+번\s*/, '').trim();
+  // Remove gender suffixes in parentheses/brackets e.g. "(남)", "[여]"
+  cleaned = cleaned.replace(/[\(\[\{\<]?(남|여|남학생|여학생|male|female|m|f)[\)\]\}\>]?/gi, '').trim();
+  return cleaned;
+}
+
+/**
+ * Helper to parse a single token like "1. 김철수(남)" or "이영희"
+ */
+function parseSingleStudentToken(token: string, idxSeed: number): Student | null {
+  if (!token || !token.trim()) return null;
+
+  let gender: 'male' | 'female' | 'unspecified' = 'unspecified';
+  if (/(남|남학생|m|male)/i.test(token)) {
+    gender = 'male';
+  } else if (/(여|여학생|f|female)/i.test(token)) {
+    gender = 'female';
+  }
+
+  const cleanName = cleanStudentName(token);
+  if (!cleanName || /^\d+$/.test(cleanName)) return null; // ignore pure numbers or empty
+
+  return {
+    id: `std_${Date.now()}_${idxSeed}_${Math.random().toString(36).substring(2, 6)}`,
+    name: cleanName,
+    gender,
+    pin: '1234',
+  };
+}
+
+/**
+ * Parse bulk text input into Student list (Excel paste, text list, CSV, etc.)
  */
 export function parseStudentsFromText(text: string): Student[] {
-  const lines = text
-    .split(/[\n,;\t]+/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  if (!text || !text.trim()) return [];
 
-  return lines.map((name, idx) => {
-    let gender: 'male' | 'female' | 'unspecified' = 'unspecified';
-    let cleanName = name;
+  const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  const parsedStudents: Student[] = [];
 
-    // Optional tags in text like "김철수(남)" or "이영희[여]"
-    if (/(남|m|male)/i.test(name)) {
-      gender = 'male';
-      cleanName = name.replace(/[\(\[\{]?(남|m|male)[\)\]\}]?/gi, '').trim();
-    } else if (/(여|f|female)/i.test(name)) {
-      gender = 'female';
-      cleanName = name.replace(/[\(\[\{]?(여|f|female)[\)\]\}]?/gi, '').trim();
+  let seed = 0;
+  for (const line of rawLines) {
+    seed++;
+    // Skip common header lines if present
+    if (/^(번호|이름|성별|성명|no|name|gender|pin|비밀번호)/i.test(line) && (line.includes('\t') || line.includes(',') || line.includes(' '))) {
+      const lower = line.toLowerCase();
+      if (lower.includes('이름') || lower.includes('name') || lower.includes('성명')) {
+        continue;
+      }
     }
 
-    return {
-      id: `std_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-      name: cleanName || name,
-      gender,
-      pin: '1234',
-    };
-  });
+    // Case 1: Tab-separated (Excel / Google Sheets paste)
+    if (line.includes('\t')) {
+      const parts = line.split('\t').map((p) => p.trim()).filter((p) => p.length > 0);
+
+      let name = '';
+      let gender: 'male' | 'female' | 'unspecified' = 'unspecified';
+      let pin = '1234';
+
+      for (const part of parts) {
+        if (/^(남|남학생|m|male)$/i.test(part)) {
+          gender = 'male';
+        } else if (/^(여|여학생|f|female)$/i.test(part)) {
+          gender = 'female';
+        } else if (/^\d{4,6}$/.test(part) && name.length > 0) {
+          pin = part;
+        } else if (!/^\d+$/.test(part) && !name) {
+          name = part;
+        }
+      }
+
+      if (!name) {
+        const potentialName = parts.find((p) => !/^\d+$/.test(p) && !/^(남|여|m|f|male|female)$/i.test(p));
+        if (potentialName) name = potentialName;
+      }
+
+      if (name) {
+        const cleanName = cleanStudentName(name);
+        if (cleanName && !/^\d+$/.test(cleanName)) {
+          parsedStudents.push({
+            id: `std_${Date.now()}_${seed}_${Math.random().toString(36).substring(2, 6)}`,
+            name: cleanName,
+            gender,
+            pin,
+          });
+          continue;
+        }
+      }
+    }
+
+    // Case 2: Line contains comma or semicolon separated names
+    const delimiterSplit = line.split(/[,;]+/).map((item) => item.trim()).filter((item) => item.length > 0);
+    if (delimiterSplit.length > 1) {
+      for (const item of delimiterSplit) {
+        seed++;
+        const student = parseSingleStudentToken(item, seed);
+        if (student) parsedStudents.push(student);
+      }
+      continue;
+    }
+
+    // Case 3: Single line name or space-separated names
+    const singleStudent = parseSingleStudentToken(line, seed);
+    if (singleStudent) {
+      parsedStudents.push(singleStudent);
+    } else {
+      const spaceParts = line.split(/\s+/).map((p) => p.trim()).filter((p) => p.length > 0);
+      for (const part of spaceParts) {
+        seed++;
+        const s = parseSingleStudentToken(part, seed);
+        if (s) parsedStudents.push(s);
+      }
+    }
+  }
+
+  return parsedStudents;
 }
 
 /**

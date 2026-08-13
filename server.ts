@@ -150,7 +150,7 @@ async function startServer() {
     const updated: ClassroomData = {
       ...current,
       classId,
-      students: (students && students.length > 0) ? students : (current.students ?? []),
+      students: Array.isArray(students) ? students : (current.students ?? []),
       desks: updatedDesks,
       config: config ?? current.config,
       ticketingState: mergedTicketingState,

@@ -235,17 +235,23 @@ export default function App() {
   // Ref tracking last received/saved data payload string and flag for server updates
   const lastKnownDataRef = useRef<string>('');
   const isIncomingServerUpdateRef = useRef<boolean>(false);
+  const lastLocalMutationTimeRef = useRef<number>(0);
 
   // Helper to safely apply server data snapshot
   const applyServerData = (data: any) => {
     if (!data) return;
 
+    // Do NOT overwrite local edits if a teacher mutation occurred in the last 2000ms
+    if (Date.now() - lastLocalMutationTimeRef.current < 2000) {
+      return;
+    }
+
     isIncomingServerUpdateRef.current = true;
 
-    if (Array.isArray(data.students) && data.students.length > 0) {
+    if (Array.isArray(data.students)) {
       setStudents(data.students);
     }
-    if (Array.isArray(data.desks) && data.desks.length > 0) {
+    if (Array.isArray(data.desks)) {
       setDesks(data.desks);
     }
     if (data.config) {
@@ -281,6 +287,22 @@ export default function App() {
       // Ignore
     }
   }, [classId]);
+
+  // Clean up desk assignments when a student is deleted
+  useEffect(() => {
+    const studentIds = new Set(students.map((s) => s.id));
+    setDesks((prevDesks) => {
+      let changed = false;
+      const cleaned = prevDesks.map((d) => {
+        if (d.assignedStudentId && !studentIds.has(d.assignedStudentId)) {
+          changed = true;
+          return { ...d, assignedStudentId: null };
+        }
+        return d;
+      });
+      return changed ? cleaned : prevDesks;
+    });
+  }, [students]);
 
   // Auto-sync desks assignedStudentId with ticketing claims
   useEffect(() => {
@@ -375,10 +397,12 @@ export default function App() {
       return;
     }
 
+    lastLocalMutationTimeRef.current = Date.now();
+
     if (!isStudentOnlyMode) {
       const timer = setTimeout(() => {
         saveClassroomDataToServer();
-      }, 500);
+      }, 150);
       return () => clearTimeout(timer);
     }
   }, [students, desks, config, ticketingState, classId, isStudentOnlyMode]);
