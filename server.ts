@@ -90,6 +90,11 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // Health check endpoint for Render / Vercel deployment health monitoring
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // API Routes
   // 1. Get classroom state by classId
   app.get('/api/classrooms/:classId', (req, res) => {

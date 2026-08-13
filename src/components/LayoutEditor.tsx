@@ -198,10 +198,13 @@ export const LayoutEditor: React.FC<LayoutEditorProps> = ({
               max={12}
               value={config.rows}
               onChange={(e) => {
-                const rows = parseInt(e.target.value) || 1;
-                const newCfg = { ...config, rows };
-                setConfig(newCfg);
-                setDesks(generateDesksFromConfig(newCfg));
+                const val = parseInt(e.target.value);
+                if (!isNaN(val) && val >= 1) {
+                  const rows = Math.min(12, val);
+                  const newCfg = { ...config, rows };
+                  setConfig(newCfg);
+                  setDesks(generateDesksFromConfig(newCfg));
+                }
               }}
               className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-center font-bold text-slate-800"
             />
@@ -215,11 +218,14 @@ export const LayoutEditor: React.FC<LayoutEditorProps> = ({
               max={16}
               value={config.cols}
               onChange={(e) => {
-                const cols = parseInt(e.target.value) || 1;
-                const newPattern = buildGroupPatternForCols(cols, currentLayoutType);
-                const newCfg = { ...config, cols, groupPattern: newPattern };
-                setConfig(newCfg);
-                setDesks(generateDesksFromConfig(newCfg));
+                const val = parseInt(e.target.value);
+                if (!isNaN(val) && val >= 1) {
+                  const cols = Math.min(16, val);
+                  const newPattern = buildGroupPatternForCols(cols, currentLayoutType);
+                  const newCfg = { ...config, cols, groupPattern: newPattern };
+                  setConfig(newCfg);
+                  setDesks(generateDesksFromConfig(newCfg));
+                }
               }}
               className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-center font-bold text-slate-800"
             />

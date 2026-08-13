@@ -237,12 +237,38 @@ export default function App() {
   const isIncomingServerUpdateRef = useRef<boolean>(false);
   const lastLocalMutationTimeRef = useRef<number>(0);
 
+  // Global activity listener to update lastLocalMutationTimeRef when user is typing
+  useEffect(() => {
+    const handleTypingActivity = () => {
+      lastLocalMutationTimeRef.current = Date.now();
+    };
+    window.addEventListener('input', handleTypingActivity, true);
+    window.addEventListener('keydown', handleTypingActivity, true);
+    return () => {
+      window.removeEventListener('input', handleTypingActivity, true);
+      window.removeEventListener('keydown', handleTypingActivity, true);
+    };
+  }, []);
+
+  // Check if an input or textarea element is currently focused
+  const isUserTyping = (): boolean => {
+    if (typeof document === 'undefined') return false;
+    const active = document.activeElement;
+    if (!active) return false;
+    const tagName = active.tagName.toUpperCase();
+    return (
+      tagName === 'INPUT' ||
+      tagName === 'TEXTAREA' ||
+      (active as HTMLElement).isContentEditable
+    );
+  };
+
   // Helper to safely apply server data snapshot
   const applyServerData = (data: any) => {
     if (!data) return;
 
-    // Do NOT overwrite local edits if a teacher mutation occurred in the last 2000ms
-    if (Date.now() - lastLocalMutationTimeRef.current < 2000) {
+    // Do NOT overwrite local edits/state if user is actively typing or a mutation occurred within 5000ms
+    if (isUserTyping() || Date.now() - lastLocalMutationTimeRef.current < 5000) {
       return;
     }
 

@@ -583,7 +583,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     <input
                       type="text"
                       maxLength={6}
-                      value={s.pin || '1234'}
+                      value={s.pin !== undefined ? s.pin : '1234'}
                       onChange={(e) => {
                         const val = e.target.value;
                         setStudents((prev) =>
