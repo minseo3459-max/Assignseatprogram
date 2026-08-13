@@ -670,7 +670,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
           <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl text-amber-900 text-sm font-semibold flex items-center space-x-2">
             <HelpCircle className="w-5 h-5 text-amber-600 shrink-0" />
             <span>
-              상단 드롭다운에서 본인 이름을 선택한 후, 4자리 비밀번호(PIN)를 입력하면 응모할 수 있습니다. (기본 PIN: 1234)
+              상단 드롭다운에서 본인 이름을 선택한 후, 4자리 비밀번호(PIN)를 입력하면 응모할 수 있습니다. (개인정보 보호를 위해 타인이 응모한 자리의 이름은 표시되지 않으며, 본인이 응모한 자리에만 본인 이름이 표시됩니다)
             </span>
           </div>
         )}
@@ -779,7 +779,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                         return;
                       }
                       if (isClaimedByOther) {
-                        alert(`이미 ${claim.studentName} 학생이 응모한 자리입니다.`);
+                        alert('이미 다른 학생이 응모를 완료한 자리입니다.');
                         return;
                       }
                       if (isClaimedByMe) {
@@ -844,11 +844,12 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                         </div>
                       ) : isClaimedByOther ? (
                         <div>
-                          <div className="font-extrabold text-slate-700 text-sm leading-tight truncate">
-                            {claim.studentName}
+                          <div className="font-extrabold text-slate-600 text-xs sm:text-sm leading-tight truncate flex items-center justify-center space-x-0.5">
+                            <Lock className="w-3 h-3 text-slate-400 inline shrink-0 mr-0.5" />
+                            <span>응모 완료</span>
                           </div>
                           <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                            응모 완료
+                            (선점된 자리)
                           </div>
                         </div>
                       ) : desk.isLocked ? (
@@ -901,14 +902,21 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto p-1">
             {(Object.entries(ticketingState.claims) as [string, TicketingClaim][]).map(([deskId, claim]) => {
               const desk = desks.find((d) => d.id === deskId);
+              const isMyClaim = Boolean(selectedStudentId && claim.studentId === selectedStudentId);
               return (
                 <div
                   key={deskId}
-                  className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                  className={`flex items-center justify-between p-3 border rounded-xl text-xs ${
+                    isMyClaim
+                      ? 'bg-amber-50/90 border-amber-300 font-extrabold'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
                 >
                   <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="font-bold text-slate-900">{claim.studentName} 학생</span>
+                    <span className={`w-2 h-2 rounded-full ${isMyClaim ? 'bg-amber-500' : 'bg-slate-400'}`}></span>
+                    <span className={`font-bold ${isMyClaim ? 'text-amber-950' : 'text-slate-700'}`}>
+                      {isMyClaim ? `${claim.studentName} 학생 (나)` : '익명 학생 (응모 완료)'}
+                    </span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
