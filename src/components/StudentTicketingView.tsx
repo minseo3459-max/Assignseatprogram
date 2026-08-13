@@ -56,27 +56,39 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   isStudentOnlyMode,
   classId,
 }) => {
-  // Selected Student ID
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
-    try {
-      return sessionStorage.getItem('student_ticketing_my_id') || '';
-    } catch {
-      return '';
-    }
-  });
+  // Selected Student ID - Starts empty, never saved in localStorage/sessionStorage
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
 
   // Modal states for seat claim, swap, and cancellation
   const [confirmDesk, setConfirmDesk] = useState<Desk | null>(null);
   const [swapConfirmDesk, setSwapConfirmDesk] = useState<Desk | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
-  // PIN Verification Modal states
+  // PIN Verification Modal states (Name Selection)
   const [pinModalStudent, setPinModalStudent] = useState<Student | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
 
+  // PIN input state for seat claim/swap/cancel action confirmation
+  const [actionPinInput, setActionPinInput] = useState('');
+  const [actionPinError, setActionPinError] = useState<string | null>(null);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Clear any legacy persistent storage on mount
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('student_ticketing_my_id');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('student_pin_verified_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const activeStudents = students.filter((s) => !s.isAbsent);
   const currentStudent = activeStudents.find((s) => s.id === selectedStudentId);
@@ -88,37 +100,20 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   const currentStudentDeskId = currentStudentClaimEntry ? currentStudentClaimEntry[0] : null;
   const currentStudentDesk = desks.find((d) => d.id === currentStudentDeskId);
 
-  // Handle student name selection with PIN verification check
+  // Handle student name selection - MUST verify PIN every single time
   const handleSelectStudent = (id: string) => {
     if (!id) {
       setSelectedStudentId('');
-      try {
-        sessionStorage.removeItem('student_ticketing_my_id');
-      } catch {
-        // ignore
-      }
       return;
     }
 
     const target = activeStudents.find((s) => s.id === id);
     if (!target) return;
 
-    // Check if already verified on this device
-    const isVerified = localStorage.getItem(`student_pin_verified_${id}`) === 'true';
-    if (isVerified) {
-      setSelectedStudentId(id);
-      try {
-        sessionStorage.setItem('student_ticketing_my_id', id);
-      } catch {
-        // ignore
-      }
-      showToast(`🔑 [${target.name}] 학생 본인 확인이 완료되었습니다.`);
-    } else {
-      // Prompt PIN Modal
-      setPinModalStudent(target);
-      setPinInput('');
-      setPinError(null);
-    }
+    // Always prompt PIN Modal for authentication
+    setPinModalStudent(target);
+    setPinInput('');
+    setPinError(null);
   };
 
   // Submit PIN for student authentication
@@ -128,13 +123,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     const expectedPin = pinModalStudent.pin || '1234';
     if (pinInput.trim() === expectedPin) {
-      localStorage.setItem(`student_pin_verified_${pinModalStudent.id}`, 'true');
       setSelectedStudentId(pinModalStudent.id);
-      try {
-        sessionStorage.setItem('student_ticketing_my_id', pinModalStudent.id);
-      } catch {
-        // ignore
-      }
       soundManager.playPop();
       showToast(`✅ [${pinModalStudent.name}] 학생 본인 인증 성공!`);
       setPinModalStudent(null);
@@ -149,11 +138,6 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
   // Switch account / re-authenticate
   const handleSwitchAccount = () => {
     setSelectedStudentId('');
-    try {
-      sessionStorage.removeItem('student_ticketing_my_id');
-    } catch {
-      // ignore
-    }
     showToast('이름 선택 화면으로 이동합니다.');
   };
 
@@ -192,6 +176,14 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       return;
     }
 
+    // Verify PIN for action
+    const expectedPin = currentStudent.pin || '1234';
+    if (actionPinInput.trim() !== expectedPin) {
+      soundManager.playTick();
+      setActionPinError('⚠️ 비밀번호가 일치하지 않습니다. (선생님께 받은 4자리 PIN을 입력하세요)');
+      return;
+    }
+
     // Attempt claim via Server API for real-time atomic claim
     if (classId) {
       try {
@@ -225,11 +217,16 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
           showToast(`🎉 [${formatDeskLabel(confirmDesk.label)}] 티켓팅 성공!`);
           setConfirmDesk(null);
+          setActionPinInput('');
+          setActionPinError(null);
+          setSelectedStudentId(''); // Logout student session to mandate re-authentication for next user
           return;
         } else {
           alert(data.error || '⚠️ 방금 다른 학생이 이 자리를 선택했습니다! 다른 빈 자리를 선택해 주세요.');
           if (data.ticketingState) onUpdateTicketingState(data.ticketingState);
           setConfirmDesk(null);
+          setActionPinInput('');
+          setActionPinError(null);
           return;
         }
       } catch {
@@ -284,6 +281,9 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     showToast(`🎉 [${formatDeskLabel(confirmDesk.label)}] 티켓팅 성공!`);
     setConfirmDesk(null);
+    setActionPinInput('');
+    setActionPinError(null);
+    setSelectedStudentId(''); // Reset for anti-impersonation
   };
 
   // Execute Seat Swap (Changing from Desk A to Desk B)
@@ -293,6 +293,14 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     if (!ticketingState.isOpen) {
       alert('현재 티켓팅이 마감되어 있습니다.');
       setSwapConfirmDesk(null);
+      return;
+    }
+
+    // Verify PIN for action
+    const expectedPin = currentStudent.pin || '1234';
+    if (actionPinInput.trim() !== expectedPin) {
+      soundManager.playTick();
+      setActionPinError('⚠️ 비밀번호가 일치하지 않습니다. (선생님께 받은 4자리 PIN을 입력하세요)');
       return;
     }
 
@@ -328,11 +336,16 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
           showToast(`🎉 [${formatDeskLabel(swapConfirmDesk.label)}]로 성공적으로 변경되었습니다!`);
           setSwapConfirmDesk(null);
+          setActionPinInput('');
+          setActionPinError(null);
+          setSelectedStudentId(''); // Reset session
           return;
         } else {
           alert(data.error || '⚠️ 해당 자리는 이미 다른 학생이 선점했습니다.');
           if (data.ticketingState) onUpdateTicketingState(data.ticketingState);
           setSwapConfirmDesk(null);
+          setActionPinInput('');
+          setActionPinError(null);
           return;
         }
       } catch {
@@ -386,12 +399,23 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
 
     showToast(`🎉 [${formatDeskLabel(swapConfirmDesk.label)}]로 성공적으로 변경되었습니다!`);
     setSwapConfirmDesk(null);
+    setActionPinInput('');
+    setActionPinError(null);
+    setSelectedStudentId('');
   };
 
   // Execute Claim Cancellation
   const handleConfirmCancel = async () => {
     if (!currentStudentDeskId || !currentStudent) {
       setIsCancelModalOpen(false);
+      return;
+    }
+
+    // Verify PIN for action
+    const expectedPin = currentStudent.pin || '1234';
+    if (actionPinInput.trim() !== expectedPin) {
+      soundManager.playTick();
+      setActionPinError('⚠️ 비밀번호가 일치하지 않습니다. (선생님께 받은 4자리 PIN을 입력하세요)');
       return;
     }
 
@@ -416,6 +440,9 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
           soundManager.playPop();
           showToast('자리 응모가 성공적으로 취소되었습니다.');
           setIsCancelModalOpen(false);
+          setActionPinInput('');
+          setActionPinError(null);
+          setSelectedStudentId('');
           return;
         }
       } catch {
@@ -441,6 +468,9 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
     soundManager.playPop();
     showToast('자리 응모가 성공적으로 취소되었습니다.');
     setIsCancelModalOpen(false);
+    setActionPinInput('');
+    setActionPinError(null);
+    setSelectedStudentId('');
   };
 
   // Calculate statistics
@@ -471,7 +501,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
             <div className="flex items-center space-x-3 mb-2">
               <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 font-extrabold text-xs rounded-full border border-emerald-500/40 flex items-center space-x-1">
                 <Ticket className="w-3.5 h-3.5" />
-                <span>학생 실시간 응모 전용 (로그인 불필요)</span>
+                <span>🔒 매 응모시 4자리 PIN 개인인증 필수</span>
               </span>
 
               {ticketingState.isOpen ? (
@@ -754,15 +784,21 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
                       }
                       if (isClaimedByMe) {
                         // Clicking own seat opens cancel dialog
+                        setActionPinInput('');
+                        setActionPinError(null);
                         setIsCancelModalOpen(true);
                         return;
                       }
                       if (currentStudentDesk) {
                         // Already holds a seat, clicking another vacant seat -> opens swap confirm modal
+                        setActionPinInput('');
+                        setActionPinError(null);
                         setSwapConfirmDesk(desk);
                         return;
                       }
                       // Holds no seat, clicking vacant seat -> opens claim confirm modal
+                      setActionPinInput('');
+                      setActionPinError(null);
                       setConfirmDesk(desk);
                     }}
                     className={`absolute rounded-2xl border-2 transition-all duration-200 flex flex-col justify-between p-2.5 shadow-sm ${
@@ -979,6 +1015,31 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               </div>
             </div>
 
+            {/* PIN Verification Input for Action */}
+            <div className="space-y-2 bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100">
+              <label className="block text-xs font-black text-indigo-900 flex items-center justify-between">
+                <span>🔑 [{currentStudent.name}] 학생 본인 확인 PIN</span>
+                <span className="text-[10px] text-indigo-600 font-normal">* 응모 시 매번 필수</span>
+              </label>
+              <input
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={actionPinInput}
+                onChange={(e) => {
+                  setActionPinInput(e.target.value);
+                  setActionPinError(null);
+                }}
+                placeholder="비밀번호 4자리 입력 (기본: 1234)"
+                className="w-full text-center tracking-widest text-2xl font-mono font-black p-3 bg-white border-2 border-indigo-300 focus:border-indigo-600 rounded-xl focus:outline-none transition shadow-2xs"
+              />
+              {actionPinError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl text-center">
+                  {actionPinError}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setConfirmDesk(null)}
@@ -1029,6 +1090,31 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               </div>
             </div>
 
+            {/* PIN Verification Input for Swap */}
+            <div className="space-y-2 bg-amber-50/70 p-4 rounded-2xl border border-amber-200">
+              <label className="block text-xs font-black text-amber-900 flex items-center justify-between">
+                <span>🔑 [{currentStudent.name}] 학생 본인 확인 PIN</span>
+                <span className="text-[10px] text-amber-700 font-normal">* 변경 시 필수 입력</span>
+              </label>
+              <input
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={actionPinInput}
+                onChange={(e) => {
+                  setActionPinInput(e.target.value);
+                  setActionPinError(null);
+                }}
+                placeholder="비밀번호 4자리 입력"
+                className="w-full text-center tracking-widest text-2xl font-mono font-black p-3 bg-white border-2 border-amber-300 focus:border-amber-600 rounded-xl focus:outline-none transition shadow-2xs"
+              />
+              {actionPinError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl text-center">
+                  {actionPinError}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setSwapConfirmDesk(null)}
@@ -1050,7 +1136,7 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
       )}
 
       {/* 4. Seat Cancellation Modal */}
-      {isCancelModalOpen && currentStudentDesk && (
+      {isCancelModalOpen && currentStudentDesk && currentStudent && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 space-y-6 animate-in fade-in zoom-in duration-150">
             <div className="text-center space-y-2">
@@ -1068,6 +1154,31 @@ export const StudentTicketingView: React.FC<StudentTicketingViewProps> = ({
               <span className="font-black text-rose-700 text-xl block mt-1">
                 {currentStudentDesk.label}번 자리
               </span>
+            </div>
+
+            {/* PIN Verification Input for Cancel */}
+            <div className="space-y-2 bg-rose-50/70 p-4 rounded-2xl border border-rose-200">
+              <label className="block text-xs font-black text-rose-900 flex items-center justify-between">
+                <span>🔑 [{currentStudent.name}] 학생 본인 확인 PIN</span>
+                <span className="text-[10px] text-rose-700 font-normal">* 취소 시 필수 입력</span>
+              </label>
+              <input
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={actionPinInput}
+                onChange={(e) => {
+                  setActionPinInput(e.target.value);
+                  setActionPinError(null);
+                }}
+                placeholder="비밀번호 4자리 입력"
+                className="w-full text-center tracking-widest text-2xl font-mono font-black p-3 bg-white border-2 border-rose-300 focus:border-rose-600 rounded-xl focus:outline-none transition shadow-2xs"
+              />
+              {actionPinError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl text-center">
+                  {actionPinError}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center space-x-3">
