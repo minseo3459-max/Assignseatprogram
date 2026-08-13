@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   X,
   Copy,
@@ -12,7 +13,8 @@ import {
   Play,
   Pause,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 import { TicketingState } from '../types';
 import { soundManager } from '../utils/sound';
@@ -37,14 +39,40 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [showQr, setShowQr] = useState(false);
-
-  if (!isOpen) return null;
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [qrLoading, setQrLoading] = useState<boolean>(true);
 
   // Generate full absolute URL for student ticketing with classId
-  const baseUrl = window.location.origin + window.location.pathname;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
   const studentLink = classId
     ? `${baseUrl}?classId=${classId}&mode=student_ticketing`
     : `${baseUrl}?mode=student_ticketing`;
+
+  useEffect(() => {
+    if (!studentLink || !isOpen) return;
+    setQrLoading(true);
+    QRCode.toDataURL(studentLink, {
+      width: 320,
+      margin: 2,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+      errorCorrectionLevel: 'M',
+    })
+      .then((url) => {
+        setQrDataUrl(url);
+        setQrLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to generate local QR code:', err);
+        const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(studentLink)}`;
+        setQrDataUrl(fallbackUrl);
+        setQrLoading(false);
+      });
+  }, [studentLink, isOpen]);
+
+  if (!isOpen) return null;
 
   const shareText = `📢 [우리반 자리 티켓팅 안내]
 
@@ -93,9 +121,16 @@ ${studentLink}`;
     window.open(studentLink, '_blank');
   };
 
-  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-    studentLink
-  )}`;
+  const handleDownloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    a.download = `student-ticketing-qr-${classId || 'class'}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    soundManager.playPop();
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -280,24 +315,41 @@ ${studentLink}`;
 
         {/* QR Code Popup Box */}
         {showQr && (
-          <div className="bg-slate-900 text-white p-6 rounded-3xl flex flex-col items-center justify-center space-y-3 animate-in fade-in duration-200 border border-slate-800 shadow-xl">
-            <div className="bg-white p-3 rounded-2xl shadow-md border-4 border-emerald-400">
-              <img
-                src={qrApiUrl}
-                alt="Student Ticketing QR Code"
-                className="w-44 h-44 object-contain"
-                onError={(e) => {
-                  // Fallback if network blocked
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
+          <div className="bg-slate-900 text-white p-6 rounded-3xl flex flex-col items-center justify-center space-y-4 animate-in fade-in duration-200 border border-slate-800 shadow-xl">
+            <div className="bg-white p-3 rounded-2xl shadow-md border-4 border-emerald-400 flex items-center justify-center min-w-[200px] min-h-[200px]">
+              {qrLoading ? (
+                <div className="w-48 h-48 flex items-center justify-center text-slate-500 font-bold text-xs">
+                  <span>QR 코드 생성 중...</span>
+                </div>
+              ) : qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt="Student Ticketing QR Code"
+                  className="w-48 h-48 object-contain rounded-lg"
+                />
+              ) : (
+                <div className="w-48 h-48 flex items-center justify-center text-slate-500 font-bold text-xs">
+                  <span>QR 코드를 불러올 수 없습니다</span>
+                </div>
+              )}
             </div>
-            <div className="text-center">
-              <p className="text-xs font-bold text-emerald-300">📱 카메라로 QR코드를 스캔하세요!</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+
+            <div className="text-center space-y-1">
+              <p className="text-xs font-bold text-emerald-300">📱 스마트폰 카메라로 QR코드를 스캔하세요!</p>
+              <p className="text-[10px] text-slate-400">
                 스마트폰으로 카메라를 비추면 바로 학생 응모 화면으로 연결됩니다.
               </p>
             </div>
+
+            {qrDataUrl && !qrLoading && (
+              <button
+                onClick={handleDownloadQr}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition border border-slate-700 active:scale-95 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>QR코드 이미지 저장</span>
+              </button>
+            )}
           </div>
         )}
 
