@@ -161,7 +161,6 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
             <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
 
             <div className="flex items-center space-x-2 font-bold text-sm sm:text-base tracking-wider text-emerald-300 text-center">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
               <span>칠 판 (BLACKBOARD)</span>
             </div>
           </div>
@@ -271,9 +270,9 @@ export const ClassroomCanvas: React.FC<ClassroomCanvasProps> = ({
                     <span className="bg-slate-200/80 text-slate-700 px-1.5 py-0.2 rounded font-mono">
                       {desk.label}
                     </span>
-                    {desk.sectionId && (
+                    {desk.sectionId && config.layoutType !== 'free' && (
                       <span className="text-[9px] text-indigo-600 font-medium hidden sm:inline">
-                        {desk.sectionId}분단
+                        {desk.sectionId}{config.layoutType === 'group' ? '모둠' : '분단'}
                       </span>
                     )}
                   </div>

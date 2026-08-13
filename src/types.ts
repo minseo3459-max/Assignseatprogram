@@ -31,13 +31,15 @@ export interface ClassroomConfig {
   name: string;
   rows: number;
   cols: number;
-  groupPattern: number[]; // e.g. [2, 2, 2] means 2 seats per group (3 분단)
+  groupPattern: number[]; // e.g. [2, 2, 2] means 2 seats per group
   rowGap: number;
   colGap: number;
   groupGap: number;
   boardPosition: 'top' | 'bottom';
   windowPosition: 'left' | 'right';
   hallwayPosition: 'right' | 'left';
+  layoutType?: 'pairs' | 'singles' | 'group' | 'free';
+  groupSize?: number; // Default 4 for 모둠형 (group mode)
 }
 
 export interface ClassroomPreset {

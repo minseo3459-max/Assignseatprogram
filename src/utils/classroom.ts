@@ -40,29 +40,132 @@ export const DEFAULT_CONFIG: ClassroomConfig = {
   boardPosition: 'top',
   windowPosition: 'left',
   hallwayPosition: 'right',
+  layoutType: 'pairs',
+  groupSize: 4,
 };
 
 export const DESK_WIDTH = 110;
 export const DESK_HEIGHT = 68;
 
 /**
- * Generate desks based on configuration grid logic
+ * Helper to build group pattern for even/odd columns in pair or single mode
+ */
+export function buildGroupPatternForCols(cols: number, layoutType: string = 'pairs'): number[] {
+  if (layoutType === 'singles') {
+    return Array(cols).fill(1);
+  }
+  const pattern: number[] = [];
+  let rem = cols;
+  while (rem > 0) {
+    if (rem >= 2) {
+      pattern.push(2);
+      rem -= 2;
+    } else {
+      pattern.push(1);
+      rem -= 1;
+    }
+  }
+  return pattern.length > 0 ? pattern : [cols];
+}
+
+/**
+ * Generate desks based on configuration grid or pod logic
  */
 export function generateDesksFromConfig(config: ClassroomConfig): Desk[] {
-  const { rows, cols, groupPattern, rowGap, colGap, groupGap } = config;
+  const { rows, cols, groupPattern, rowGap, colGap, groupGap, layoutType, groupSize } = config;
   const desks: Desk[] = [];
 
   const startX = 40;
   const startY = 40;
 
+  // Mode: Group / Pod Layout (모둠형)
+  if (layoutType === 'group') {
+    const k = groupSize || 4; // default 4 students per group
+    const podCols = Math.ceil(k / 2); // e.g., for k=4 -> 2 cols; k=5,6 -> 3 cols; k=8 -> 4 cols
+    const podRows = Math.ceil(k / podCols); // e.g., for k=4 -> 2 rows; k=5,6 -> 2 rows
+    const totalDesksTarget = Math.max(1, rows * cols);
+    const totalPods = Math.max(1, Math.ceil(totalDesksTarget / k));
+
+    // Number of pod clusters per row
+    const podsInRow = Math.max(1, Math.floor(cols / podCols));
+
+    const innerRowGap = 10;
+    const groupRowGap = 50;
+    const podWidth = podCols * DESK_WIDTH + (podCols - 1) * colGap;
+    const podHeight = podRows * DESK_HEIGHT + (podRows - 1) * innerRowGap;
+
+    let deskCounter = 1;
+
+    for (let pIdx = 0; pIdx < totalPods; pIdx++) {
+      const pRow = Math.floor(pIdx / podsInRow);
+      const pCol = pIdx % podsInRow;
+
+      const podStartX = startX + pCol * (podWidth + groupGap);
+      const podStartY = startY + pRow * (podHeight + groupRowGap);
+
+      for (let dIdx = 0; dIdx < k; dIdx++) {
+        const dRow = Math.floor(dIdx / podCols);
+        const dCol = dIdx % podCols;
+
+        const deskX = podStartX + dCol * (DESK_WIDTH + colGap);
+        const deskY = podStartY + dRow * (DESK_HEIGHT + innerRowGap);
+
+        desks.push({
+          id: `desk_group_${pIdx}_${dIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          label: `${deskCounter}번`,
+          x: deskX,
+          y: deskY,
+          width: DESK_WIDTH,
+          height: DESK_HEIGHT,
+          assignedStudentId: null,
+          sectionId: pIdx + 1,
+        });
+
+        deskCounter++;
+      }
+    }
+
+    return desks;
+  }
+
+  // Mode: Free Placement (자유 배정)
+  if (layoutType === 'free') {
+    let deskCounter = 1;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        desks.push({
+          id: `desk_free_${r}_${c}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          label: `${deskCounter}번`,
+          x: startX + c * (DESK_WIDTH + colGap + 15),
+          y: startY + r * (DESK_HEIGHT + rowGap),
+          width: DESK_WIDTH,
+          height: DESK_HEIGHT,
+          assignedStudentId: null,
+          sectionId: c + 1,
+        });
+        deskCounter++;
+      }
+    }
+    return desks;
+  }
+
+  // Standard Grid Layout (pairs / singles)
+  // Ensure effectivePattern extends to cover all `cols`
+  let effectivePattern = Array.isArray(groupPattern) && groupPattern.length > 0 ? [...groupPattern] : [];
+  const patternSum = effectivePattern.reduce((a, b) => a + b, 0);
+
+  if (patternSum < cols || effectivePattern.length === 0) {
+    effectivePattern = buildGroupPatternForCols(cols, layoutType || 'pairs');
+  }
+
   let deskCounter = 1;
 
   for (let r = 0; r < rows; r++) {
     let currentX = startX;
-
     let colIndex = 0;
-    groupPattern.forEach((groupSize, groupIdx) => {
-      for (let c = 0; c < groupSize; c++) {
+
+    effectivePattern.forEach((gSize, groupIdx) => {
+      for (let c = 0; c < gSize; c++) {
         if (colIndex >= cols) break;
 
         const deskX = currentX;
@@ -82,11 +185,9 @@ export function generateDesksFromConfig(config: ClassroomConfig): Desk[] {
         deskCounter++;
         colIndex++;
 
-        // Add tight gap between seats in the same group
-        if (c < groupSize - 1) {
+        if (c < gSize - 1) {
           currentX += DESK_WIDTH + colGap;
         } else {
-          // Add group aisle gap after group completes
           currentX += DESK_WIDTH + groupGap;
         }
       }
