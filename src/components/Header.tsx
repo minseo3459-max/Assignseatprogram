@@ -45,13 +45,13 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           {/* Logo & Title */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white font-bold text-lg">
+          <div className="flex items-center space-x-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white font-bold text-lg shrink-0">
               <Grid3X3 className="w-6 h-6" />
             </div>
-            <div>
+            <div className="shrink-0">
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold tracking-tight text-white">자리 배정 시스템</h1>
+                <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-white whitespace-nowrap">자리 배정 시스템</h1>
               </div>
             </div>
           </div>

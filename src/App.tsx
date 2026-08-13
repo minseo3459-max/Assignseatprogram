@@ -569,6 +569,14 @@ export default function App() {
     setPresets((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const handleOpenAdmin = () => {
+    if (isAdminMode) {
+      setIsAdminPanelOpen(true);
+    } else {
+      setIsAdminPasswordModalOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col">
       {/* Top Header Navigation */}
@@ -585,14 +593,8 @@ export default function App() {
         onLoadPresetClick={() => setIsPresetModalOpen(true)}
         isAdminMode={isAdminMode}
         fixedCount={fixedCount}
-        onOpenAdminModal={() => {
-          if (isAdminMode) {
-            setIsAdminPanelOpen(true);
-          } else {
-            setIsAdminPasswordModalOpen(true);
-          }
-        }}
-        onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+        onOpenAdminModal={handleOpenAdmin}
+        onOpenAdminPanel={handleOpenAdmin}
         isTicketingOpen={ticketingState.isOpen}
         isStudentOnlyMode={isStudentOnlyMode}
         onTeacherUnlockRequest={() => setIsAdminPasswordModalOpen(true)}
@@ -609,7 +611,7 @@ export default function App() {
             onProceedToLayout={() => handleTabChange('layout')}
             isAdminMode={isAdminMode}
             adminPassword={adminPassword}
-            onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+            onOpenAdminPanel={handleOpenAdmin}
             onOpenAdminPasswordModal={() => setIsAdminPasswordModalOpen(true)}
             onOpenChangePasswordModal={() => setIsChangePasswordModalOpen(true)}
           />
@@ -636,7 +638,7 @@ export default function App() {
               mode="layout"
               canvasRef={canvasRef}
               isAdminMode={isAdminMode}
-              onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              onOpenAdminPanel={handleOpenAdmin}
             />
           </div>
         )}
@@ -669,7 +671,7 @@ export default function App() {
               onSwapDesks={handleSwapDesks}
               canvasRef={canvasRef}
               isAdminMode={isAdminMode}
-              onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              onOpenAdminPanel={handleOpenAdmin}
               ticketingState={ticketingState}
             />
           </div>
@@ -719,6 +721,7 @@ export default function App() {
         isOpen={isAdminPasswordModalOpen}
         onClose={() => setIsAdminPasswordModalOpen(false)}
         adminPassword={adminPassword}
+        onResetAdminPassword={() => handleChangeAdminPassword('2580')}
         onSuccess={() => {
           setIsAdminMode(true);
           setIsTeacherUnlocked(true);
@@ -729,7 +732,10 @@ export default function App() {
 
       <AdminPanel
         isOpen={isAdminPanelOpen}
-        onClose={() => setIsAdminPanelOpen(false)}
+        onClose={() => {
+          setIsAdminPanelOpen(false);
+          setIsAdminMode(false);
+        }}
         students={students}
         setStudents={setStudents}
         desks={desks}
@@ -751,13 +757,7 @@ export default function App() {
       <footer className="py-4 px-4 text-center text-xs text-slate-500 border-t border-slate-200 bg-white flex items-center justify-center space-x-2">
         <span>교실 자리 배정 및 실시간 티켓팅 시스템 · 칠판(앞) / 창문(좌) / 복도(우) 교실 환경 지원</span>
         <button
-          onClick={() => {
-            if (isAdminMode) {
-              setIsAdminPanelOpen(true);
-            } else {
-              setIsAdminPasswordModalOpen(true);
-            }
-          }}
+          onClick={handleOpenAdmin}
           className="text-slate-300 hover:text-slate-500 transition p-1 rounded"
           title="관리자 설정"
         >

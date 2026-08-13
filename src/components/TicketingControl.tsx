@@ -263,19 +263,6 @@ export const TicketingControl: React.FC<TicketingControlProps> = ({
             )}
           </button>
 
-          {/* REALTIME REFRESH BUTTON */}
-          <button
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className={`flex items-center space-x-2 px-3.5 py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 active:scale-95 text-white shadow-md transition ${
-              isRefreshing ? 'opacity-70 cursor-wait' : ''
-            }`}
-            title="학생들의 실시간 응모 현황을 즉시 불러옵니다"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">실시간 업데이트</span>
-          </button>
-
           {/* Open Student View Button */}
           <button
             onClick={onOpenStudentView}
